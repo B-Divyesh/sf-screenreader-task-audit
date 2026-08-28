@@ -3,7 +3,7 @@ use axum::{
     http::{header, HeaderValue, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, get_service, post},
     Json, Router,
 };
 use dashmap::DashMap;
@@ -235,6 +235,7 @@ async fn rate_limit(State(state): State<AppState>, request: Request, next: Next)
 }
 
 async fn security_headers(request: Request, next: Next) -> Response {
+    let path = request.uri().path().to_owned();
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
     headers.insert(
@@ -250,6 +251,20 @@ async fn security_headers(request: Request, next: Next) -> Response {
         HeaderValue::from_static("camera=(), microphone=(), geolocation=()"),
     );
     headers.insert("content-security-policy", HeaderValue::from_static("default-src 'self'; connect-src 'self' https://api.sociobot.in; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"));
+    if path.starts_with("/assets/") {
+        headers.insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
+        );
+    } else if headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|content_type| content_type.starts_with("text/html"))
+        || path == "/service-worker.js"
+    {
+        // The shell and worker must revalidate so a new deployment is discovered promptly.
+        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    }
     response
 }
 
@@ -259,10 +274,21 @@ fn app(state: AppState, dist: PathBuf) -> Router {
         .route("/reports/{id}", get(get_report))
         .layer(RequestBodyLimitLayer::new(220_000))
         .layer(middleware::from_fn_with_state(state.clone(), rate_limit));
-    let fallback = ServeDir::new(&dist).not_found_service(ServeFile::new(dist.join("index.html")));
+    let index = dist.join("index.html");
+    let fallback = ServeDir::new(&dist).not_found_service(ServeFile::new(dist.join("404.html")));
     Router::new()
         .route("/health", get(health))
         .nest("/api", api)
+        // Serve documented client routes explicitly. ServeFile otherwise keeps a 404
+        // response status when used as ServeDir's not-found service.
+        .route("/", get_service(ServeFile::new(index.clone())))
+        .route("/demo", get_service(ServeFile::new(index.clone())))
+        .route("/demo/report", get_service(ServeFile::new(index.clone())))
+        .route("/audit", get_service(ServeFile::new(index.clone())))
+        .route("/report", get_service(ServeFile::new(index.clone())))
+        .route("/privacy", get_service(ServeFile::new(index.clone())))
+        .route("/terms", get_service(ServeFile::new(index.clone())))
+        .route("/share/{id}", get_service(ServeFile::new(index)))
         .fallback_service(fallback)
         .layer(middleware::from_fn(security_headers))
         .layer(TraceLayer::new_for_http())
@@ -350,9 +376,26 @@ mod tests {
             http: reqwest::Client::new(),
         }
     }
+
+    fn test_dist() -> PathBuf {
+        let path = std::env::temp_dir().join(format!("screenreader-task-audit-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(path.join("assets")).unwrap();
+        std::fs::write(
+            path.join("index.html"),
+            "<html><body>application shell</body></html>",
+        )
+        .unwrap();
+        std::fs::write(
+            path.join("404.html"),
+            "<html><body>missing page</body></html>",
+        )
+        .unwrap();
+        std::fs::write(path.join("assets/app-123.js"), "console.log('asset')").unwrap();
+        path
+    }
     #[tokio::test]
     async fn health_returns_build_sha() {
-        let response = app(state().await, PathBuf::from("dist"))
+        let response = app(state().await, test_dist())
             .oneshot(
                 Request::builder()
                     .uri("/health")
@@ -367,7 +410,7 @@ mod tests {
     }
     #[tokio::test]
     async fn sharing_requires_a_license() {
-        let response = app(state().await, PathBuf::from("dist"))
+        let response = app(state().await, test_dist())
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -392,7 +435,7 @@ mod tests {
             .timestamp();
         let remaining = expires - chrono::Utc::now().timestamp();
         assert!((2_591_995..=2_592_005).contains(&remaining));
-        let response = app(state, PathBuf::from("dist"))
+        let response = app(state, test_dist())
             .oneshot(
                 Request::builder()
                     .uri(format!("/api/reports/{}", made.id))
@@ -405,7 +448,7 @@ mod tests {
     }
     #[tokio::test]
     async fn limiter_returns_retry_after() {
-        let app = app(state().await, PathBuf::from("dist"));
+        let app = app(state().await, test_dist());
         let mut limited = None;
         for _ in 0..45 {
             let response = app
@@ -426,5 +469,72 @@ mod tests {
         }
         let response = limited.expect("burst should be limited");
         assert_eq!(response.headers().get("retry-after").unwrap(), "1");
+    }
+
+    #[tokio::test]
+    async fn documented_spa_routes_direct_load_and_reload_with_ok_status() {
+        let app = app(state().await, test_dist());
+        for path in [
+            "/demo",
+            "/audit",
+            "/privacy",
+            "/terms",
+            "/report",
+            "/demo/report",
+            "/share/0123456789abcdef0123456789abcdef",
+        ] {
+            for _ in 0..2 {
+                let response = app
+                    .clone()
+                    .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::OK,
+                    "{path} should be a direct-loadable document"
+                );
+                assert_eq!(
+                    response.headers().get(header::CACHE_CONTROL).unwrap(),
+                    "no-cache"
+                );
+                let body = to_bytes(response.into_body(), 1024).await.unwrap();
+                assert!(String::from_utf8_lossy(&body).contains("application shell"));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn unknown_paths_are_a_real_404_and_assets_are_immutable() {
+        let app = app(state().await, test_dist());
+        let missing = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/not-a-route")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            missing.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-cache"
+        );
+        let asset = app
+            .oneshot(
+                Request::builder()
+                    .uri("/assets/app-123.js")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(asset.status(), StatusCode::OK);
+        assert_eq!(
+            asset.headers().get(header::CACHE_CONTROL).unwrap(),
+            "public, max-age=31536000, immutable"
+        );
     }
 }

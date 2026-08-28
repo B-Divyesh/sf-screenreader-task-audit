@@ -1,41 +1,26 @@
-# Screenreader Task Audit — build handoff
+# Screenreader Task Audit — repair handoff
 
-## Independent QA status — FAIL (2026-08-28)
+## Release status
 
-**Candidate:** `175ef58655edffdb2f6cdc92544531e2e89925b0`
-**Deployment:** https://screenreader-task-audit.sociobot.in
+**Repaired candidate:** commit recorded below after the repair commit is created.
 
-This handoff is superseded by independent verification in [`.factory/verification.md`](verification.md). **Do not release this candidate.** The deployed and locally built release server return HTTP 404 for direct SPA routes: `/demo`, `/audit`, `/privacy`, `/terms`, and `/demo/report`. The HTML still loads the client app, but Chromium logs a 404 console error for each document. This breaks the required direct `/demo` sandbox entry point, real-route status contract, and no-console-errors quality gate.
+This repair resolves every finding in the independent verification for candidate `175ef58655edffdb2f6cdc92544531e2e89925b0`.
 
-All seven listed claim commands passed, as did `npm test`, `cargo test`, `npx tsc --noEmit`, `cargo fmt -- --check`, `cargo clippy --all-targets -- -D warnings`, `cargo build --release`, and `npm run build`. Live `/health` reports the exact candidate SHA. The verification also confirmed live API rate limiting: a 120-request simultaneous burst allowed 40 and returned 80 `429` responses with `Retry-After: 1`.
+- Documented app routes now return **200** with the application shell on direct navigation and reload: `/`, `/demo`, `/audit`, `/privacy`, `/terms`, `/report`, `/demo/report`, and `/share/<id>`.
+- Unknown paths retain a real, styled **404** response.
+- Fingerprinted `/assets/*` now use `Cache-Control: public, max-age=31536000, immutable`; HTML and `/service-worker.js` use `Cache-Control: no-cache`.
+- The claim contract now covers JSON export, anonymized export, free local storage/no off-origin transmission, hosted $39 checkout terms, and a real create-and-open sharing flow. The sharing flow also succeeds when clipboard permission is denied and shows the link for manual copying.
 
-Open defects:
-
-- **High / release blocking:** fix SPA fallback status handling and add direct-load/reload production-server tests for every documented route.
-- **High / release blocking:** complete `.factory/claims.json` coverage and make `license-unlock` create/open a shared link rather than only asserting button visibility.
-- **Medium:** add cache-control policy for fingerprinted assets; live hashed JS/CSS/WebP currently have neither `Cache-Control` nor `ETag`.
-
-The Docker daemon was unavailable in the verifier environment, so the Docker image itself could not be built. The production Vite build and Rust release binary were independently built and run.
-
-## What shipped
+## What is shipped
 
 - A consent-first local audit for up to five essential screen-reader tasks.
-- Structured observations for results, impact, expected steps, announcements, focus, blockers, and notes.
-- An optional event trace that records only a time, event type, target, and observation.
-- A prioritized report ordered by blocked/partial result and impact.
-- Free JSON and standalone accessible HTML exports, with an anonymized option.
-- A one-click `/demo` with five realistic analytics tasks, a separate storage key, reset, and offline reload.
-- A $39 one-time team tier using the Sociobot checkout and license verification contract.
-- Server-side license verification before a shared report is stored.
-- Private shared-report URLs backed by SQLite with enforced 30-day expiry.
-- `/privacy`, `/terms`, a styled 404 route, per-route titles, canonical metadata, sitemap, robots file, CSP, and security headers.
-- A Rust axum server that serves the Vite build, reports its build SHA at `/health`, starts with only `PORT`, and shuts down cleanly.
-- Per-IP API rate limiting from the first `X-Forwarded-For` hop. Limits return `429` with `Retry-After: 1`.
-- An original generated risograph collage, compressed to 145 KB WebP. Prompt and provenance are in `.factory/design.md` and `assets/src/`.
+- Structured observations, a prioritized report, free JSON and accessible HTML exports, and an anonymized export option.
+- A one-click `/demo` with five realistic analytics tasks, separate demo storage, reset, and offline reload.
+- $39 one-time team sharing through Sociobot/Dodo; server-side license checks; 128-bit capability links that expire after 30 days.
+- Privacy and terms pages, a generated original risograph collage, security headers, local-first storage, and no runtime analytics or third-party fonts.
+- A Rust/Axum server, SQLite shared-report storage, `/health`, graceful shutdown, and per-forwarded-IP API limits with `429` and `Retry-After: 1`.
 
-The product uses no runtime AI because the job needs faithful tester evidence, not generated conclusions.
-
-## How to run
+## Run and deploy
 
 ```sh
 npm ci
@@ -43,58 +28,31 @@ npm run build
 cargo run
 ```
 
-Open `http://localhost:8080/demo`. The container build command is:
+Open `http://localhost:8080/demo`. The production image is built from the root `Dockerfile`; it needs only `PORT` (default `8080`). `BUILD_SHA` is optional and labels `/health`. The factory deployment targets the existing Container App `sf-screenreader-task-audit` in resource group `sociobot`.
 
-```sh
-docker build --build-arg BUILD_SHA=$(git rev-parse HEAD) -t screenreader-task-audit .
-```
+## Verification evidence
 
-The factory can omit `BUILD_SHA`; it defaults to `dev`. The runtime needs only `PORT`, which defaults to `8080`.
+Completed in this repair workspace on 2026-08-28 UTC:
 
-## Verification completed
+- `npm ci` completed (61 packages). `npm audit --omit=dev` found **0** production vulnerabilities.
+- `npm test` passed: **3 Vitest** tests and **22 Playwright** runs across desktop Chromium and a 390 × 844 touch viewport.
+- `npx tsc --noEmit`, `cargo test` (**6** tests), `cargo fmt -- --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo build --release` all passed.
+- Rust regression coverage directly loads and reloads every documented SPA route twice from a production-style static directory, asserts 200 and shell content, asserts unknown-route 404, and asserts both cache policies.
+- The release binary was started with only `PORT=8081`. Curl confirmed every documented route returned 200, an unknown route returned 404, HTML used `no-cache`, and a hashed asset used the immutable cache policy. Its startup log reported `configuration loaded; no secret configuration required`.
+- A release-binary Playwright smoke passed for desktop and 390 px mobile across `/demo`, `/audit`, `/privacy`, `/terms`, `/report`, and `/demo/report`: each response was 200, each page had exactly one `main` and `h1`, and there were no console or page errors.
+- Playwright's existing axe scans passed with no serious or critical findings across landing, demo, report, privacy, and terms in light and dark modes. The suite also covers keyboard route focus, reduced motion, form recovery, offline demo reload, and same-origin local-storage behavior.
+- Every `.factory/claims.json` command is represented by a tagged sandbox test; the full suite passed. The strengthened `@claim:license-unlock` test creates a mocked licensed report, verifies its request body, then opens the created URL in a clean browser context with no authorization header.
+- Current release-binary Lighthouse mobile run: **100 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 1.08 s; CLS 0**. Raw output: [`.factory/lighthouse.json`](lighthouse.json). Lighthouse used the pinned Playwright Chromium with `--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu`.
+- Docker CLI is not installed in this worker, so no local image build was possible. The Dockerfile contract is exercised by the ACR build during deployment (record deployment evidence below after it completes).
 
-- `npm test`: passed — 3 Vitest unit tests and 16 Playwright runs across desktop Chromium and a 390 × 844 mobile viewport.
-- `cargo test`: passed — 4 backend tests.
-- `npx tsc --noEmit`: passed.
-- `cargo fmt -- --check`: passed.
-- `npm run build`: passed; output is exactly `dist/` with `dist/index.html`.
-- Production bundle: 10.09 KB gzip JavaScript, 3.38 KB gzip CSS, 145 KB hero WebP.
-- Playwright axe scan: no serious or critical findings on `/`, `/demo`, `/demo/report`, `/privacy`, or `/terms`; light and dark treatments were checked across both viewports.
-- Console check: no console errors or uncaught page errors on the same routes.
-- Keyboard check: SPA route changes focus and announce the new `h1`.
-- Offline check: `/demo` reloads with sample data after the first visit.
-- Privacy check: the full demo edit and report flow made no off-origin requests.
-- Rate-limit smoke: 100 concurrent requests from one forwarded address returned 40 normal `404` responses and 60 limited `429` responses in 0.5 seconds.
-- Default runtime check: server started on port 8080 with no environment variables and logged generated/default configuration without secrets.
+## Storage and privacy
 
-Lighthouse 13.4.1 mobile results on the production Vite build:
+- Real audit key: `sra:audit:v1`; demo key: `demo:sra:audit:v1`; license key: `sb_license:screenreader-task-audit`.
+- Free audit content stays in browser storage. It reaches the server only when a licensed user selects **Create private link**.
+- SQLite retains shared copies for 30 days. Anyone with a shared capability URL can read it until expiry; the UI states this clearly.
 
-| Category or metric | Result |
-| --- | ---: |
-| Performance | 99 |
-| Accessibility | 100 |
-| Best practices | 100 |
-| SEO | 100 |
-| Largest Contentful Paint | 2.0 s |
-| Cumulative Layout Shift | 0 |
-| Total Blocking Time | 10 ms |
+## Known operational notes
 
-Raw Lighthouse evidence is in `.factory/lighthouse.json`. INP is not available in a single-load lab run; keyboard interaction tests complete without timed delays.
-
-## Privacy and storage
-
-- Real audit key: `sra:audit:v1`.
-- Demo key: `demo:sra:audit:v1`.
-- License key: `sb_license:screenreader-task-audit`.
-- Free audit content stays in local storage.
-- Only **Create private link** sends the reviewed report to the backend.
-- Shared reports use random 128-bit identifiers and expire after 30 days.
-- Payment details go only to Sociobot/Dodo. The app never receives card data.
-
-## Known gaps and next steps
-
-- The factory must register and activate the paid product before the checkout URL can sell licenses.
-- Docker was not available in this worker, so the image itself was not built here. The frontend production build and release Rust binary were built separately and passed.
-- Shared links are capability links. Anyone who receives a link can read it until expiry; the UI says “private” in that specific sense.
-- SQLite suits the current single-container deployment. A multi-replica deployment would need shared PostgreSQL storage.
-- Real NVDA, JAWS, and VoiceOver sessions remain a pilot activity; automated tests cannot replace lived screen-reader testing.
+- The paid product must remain registered and active in Sociobot for checkout to sell licenses.
+- SQLite is appropriate for this single-container deployment. Multiple replicas would need shared durable storage.
+- Automated checks complement, but do not replace, testing with NVDA, JAWS, and VoiceOver users.

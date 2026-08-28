@@ -15,10 +15,10 @@
   },
   {
     "id": "license-unlock",
-    "claim": "A valid one-time license enables private team report links.",
+    "claim": "A valid one-time license creates a private report link that opens without an account.",
     "where": "landing paid tier, report sharing section, and README",
     "test": "npm run test:e2e -- --grep @claim:license-unlock",
-    "sandbox": "fresh browser context with the documented billing verify response intercepted as valid"
+    "sandbox": "fresh creator context with a documented valid billing response and mocked report endpoint; open the created link in a clean browser context"
   },
   {
     "id": "html-export",
@@ -28,11 +28,32 @@
     "sandbox": "demo report; download and inspect the HTML file"
   },
   {
-    "id": "local-privacy",
-    "claim": "The free audit stays in the browser and sends no audit content off-site.",
+    "id": "json-export",
+    "claim": "The audit exports its five tasks as JSON.",
+    "where": "report toolbar and README",
+    "test": "npm run test:e2e -- --grep @claim:json-export",
+    "sandbox": "demo report; download JSON and assert schema, product, and five tasks"
+  },
+  {
+    "id": "anonymous-export",
+    "claim": "An anonymized JSON export removes product and environment names.",
+    "where": "report toolbar and README",
+    "test": "npm run test:e2e -- --grep @claim:anonymous-export",
+    "sandbox": "demo report; enable anonymization, download JSON, and assert withheld fields and absent source names"
+  },
+  {
+    "id": "free-local-storage",
+    "claim": "Free audits stay in browser storage until a user chooses to create a private link.",
     "where": "landing facts, privacy page, and README",
-    "test": "npm run test:e2e -- --grep @claim:local-privacy",
-    "sandbox": "fresh browser context; intercept all requests during a demo edit and report view"
+    "test": "npm run test:e2e -- --grep @claim:free-local-storage",
+    "sandbox": "fresh real-audit context; create and edit an audit, assert local storage and no API or off-origin request"
+  },
+  {
+    "id": "hosted-checkout",
+    "claim": "Team sharing costs $39 once and uses Sociobot and Dodo for checkout and refunds.",
+    "where": "landing paid tier, privacy page, terms page, and README",
+    "test": "npm run test:e2e -- --grep @claim:hosted-checkout",
+    "sandbox": "landing page; assert displayed price, exact Sociobot hosted checkout URL, and payment/refund disclosure"
   },
   {
     "id": "offline-reload",
