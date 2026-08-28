@@ -46,6 +46,7 @@ Completed in this repair workspace on 2026-08-28 UTC:
 - Docker CLI is not installed in this worker, so no local image build was possible. Azure Container Registry build `chhk` exercised the Dockerfile from the `.git`-excluded source tarball and succeeded at `2026-08-28T17:13:04Z`, producing `sociobotregistry.azurecr.io/sf-screenreader-task-audit:30bc19d16b0c` (digest `sha256:dba2533f1264463569d7930627338e5a5ad8985dee0fa6af708c109939fd22b9`).
 - The existing Container App was updated to that immutable image. Live `https://screenreader-task-audit.sociobot.in/health` reports the repaired commit SHA. Live curl checks returned 200 for every documented route; `/demo` returns `no-cache`, a live hashed JavaScript asset returns the immutable policy, and CSP, `X-Content-Type-Options`, and `Referrer-Policy` are present.
 - Live Playwright desktop and 390 px mobile smoke checks passed for `/`, `/demo`, `/audit`, `/privacy`, `/terms`, `/report`, and `/demo/report`: 200 status, exactly one `main` and `h1`, and no console/page errors.
+- A current 50-request live burst to a missing report returned 46 normal 404 responses and 4 limited 429 responses; every limited response included `Retry-After: 1`.
 
 ## Storage and privacy
 
