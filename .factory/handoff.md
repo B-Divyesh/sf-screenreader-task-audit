@@ -2,7 +2,7 @@
 
 ## Release status
 
-**Repaired candidate:** commit recorded below after the repair commit is created.
+**Repaired candidate:** `30bc19d16b0c37b75265e042dc0ff917e5e32fe2`
 
 This repair resolves every finding in the independent verification for candidate `175ef58655edffdb2f6cdc92544531e2e89925b0`.
 
@@ -43,7 +43,9 @@ Completed in this repair workspace on 2026-08-28 UTC:
 - Playwright's existing axe scans passed with no serious or critical findings across landing, demo, report, privacy, and terms in light and dark modes. The suite also covers keyboard route focus, reduced motion, form recovery, offline demo reload, and same-origin local-storage behavior.
 - Every `.factory/claims.json` command is represented by a tagged sandbox test; the full suite passed. The strengthened `@claim:license-unlock` test creates a mocked licensed report, verifies its request body, then opens the created URL in a clean browser context with no authorization header.
 - Current release-binary Lighthouse mobile run: **100 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 1.08 s; CLS 0**. Raw output: [`.factory/lighthouse.json`](lighthouse.json). Lighthouse used the pinned Playwright Chromium with `--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu`.
-- Docker CLI is not installed in this worker, so no local image build was possible. The Dockerfile contract is exercised by the ACR build during deployment (record deployment evidence below after it completes).
+- Docker CLI is not installed in this worker, so no local image build was possible. Azure Container Registry build `chhk` exercised the Dockerfile from the `.git`-excluded source tarball and succeeded at `2026-08-28T17:13:04Z`, producing `sociobotregistry.azurecr.io/sf-screenreader-task-audit:30bc19d16b0c` (digest `sha256:dba2533f1264463569d7930627338e5a5ad8985dee0fa6af708c109939fd22b9`).
+- The existing Container App was updated to that immutable image. Live `https://screenreader-task-audit.sociobot.in/health` reports the repaired commit SHA. Live curl checks returned 200 for every documented route; `/demo` returns `no-cache`, a live hashed JavaScript asset returns the immutable policy, and CSP, `X-Content-Type-Options`, and `Referrer-Policy` are present.
+- Live Playwright desktop and 390 px mobile smoke checks passed for `/`, `/demo`, `/audit`, `/privacy`, `/terms`, `/report`, and `/demo/report`: 200 status, exactly one `main` and `h1`, and no console/page errors.
 
 ## Storage and privacy
 
