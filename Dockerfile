@@ -1,7 +1,7 @@
 FROM node:22-alpine AS frontend
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm ci
 COPY index.html tsconfig.json vite.config.ts ./
 COPY src ./src
 COPY frontend ./frontend

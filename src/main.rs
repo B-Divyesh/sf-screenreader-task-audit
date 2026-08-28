@@ -1,5 +1,4 @@
 use axum::{
-    body::Body,
     extract::{Path, Request, State},
     http::{header, HeaderValue, StatusCode},
     middleware::{self, Next},
@@ -272,9 +271,11 @@ fn app(state: AppState, dist: PathBuf) -> Router {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let log_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
     tracing_subscriber::fmt()
         .json()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(log_filter)
         .init();
     let port: u16 = env::var("PORT")
         .ok()
@@ -329,7 +330,10 @@ async fn shutdown() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{body::to_bytes, http::Request};
+    use axum::{
+        body::{to_bytes, Body},
+        http::Request,
+    };
     use tower::ServiceExt;
 
     async fn state() -> AppState {
@@ -369,7 +373,9 @@ mod tests {
                     .method("POST")
                     .uri("/api/reports")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"schema":"screenreader-task-audit/v1","tasks":[]}"#))
+                    .body(Body::from(
+                        r#"{"schema":"screenreader-task-audit/v1","tasks":[]}"#,
+                    ))
                     .unwrap(),
             )
             .await

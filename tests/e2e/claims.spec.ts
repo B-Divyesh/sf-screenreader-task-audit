@@ -72,6 +72,12 @@ test('landing and audit pages have no serious accessibility findings', async ({ 
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations.filter(issue => ['serious','critical'].includes(issue.impact || ''))).toEqual([]);
   }
+  await page.emulateMedia({ colorScheme: 'dark' });
+  for (const path of ['/', '/demo']) {
+    await page.goto(path);
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations.filter(issue => ['serious','critical'].includes(issue.impact || ''))).toEqual([]);
+  }
   expect(errors).toEqual([]);
 });
 
