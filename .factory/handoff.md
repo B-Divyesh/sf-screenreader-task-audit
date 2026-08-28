@@ -1,5 +1,22 @@
 # Screenreader Task Audit — build handoff
 
+## Independent QA status — FAIL (2026-08-28)
+
+**Candidate:** `175ef58655edffdb2f6cdc92544531e2e89925b0`
+**Deployment:** https://screenreader-task-audit.sociobot.in
+
+This handoff is superseded by independent verification in [`.factory/verification.md`](verification.md). **Do not release this candidate.** The deployed and locally built release server return HTTP 404 for direct SPA routes: `/demo`, `/audit`, `/privacy`, `/terms`, and `/demo/report`. The HTML still loads the client app, but Chromium logs a 404 console error for each document. This breaks the required direct `/demo` sandbox entry point, real-route status contract, and no-console-errors quality gate.
+
+All seven listed claim commands passed, as did `npm test`, `cargo test`, `npx tsc --noEmit`, `cargo fmt -- --check`, `cargo clippy --all-targets -- -D warnings`, `cargo build --release`, and `npm run build`. Live `/health` reports the exact candidate SHA. The verification also confirmed live API rate limiting: a 120-request simultaneous burst allowed 40 and returned 80 `429` responses with `Retry-After: 1`.
+
+Open defects:
+
+- **High / release blocking:** fix SPA fallback status handling and add direct-load/reload production-server tests for every documented route.
+- **High / release blocking:** complete `.factory/claims.json` coverage and make `license-unlock` create/open a shared link rather than only asserting button visibility.
+- **Medium:** add cache-control policy for fingerprinted assets; live hashed JS/CSS/WebP currently have neither `Cache-Control` nor `ETag`.
+
+The Docker daemon was unavailable in the verifier environment, so the Docker image itself could not be built. The production Vite build and Rust release binary were independently built and run.
+
 ## What shipped
 
 - A consent-first local audit for up to five essential screen-reader tasks.
