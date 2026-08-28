@@ -1,0 +1,8 @@
+{
+  "tool": "/opt/fleet/lib/gen-image.sh",
+  "deployment": "factory-image",
+  "date": "2026-08-28",
+  "size": "1536x1024",
+  "quality": "high",
+  "prompt": "Overhead editorial still life rendered as a two-colour risograph tactile paper collage: cream recycled paper, deep navy ink, cobalt blue and vermilion red overprints, five numbered blank paper tabs without legible text, a simple keyboard key path, headphones, abstract speech-wave cut paper, registration marks and subtle halftone grain, generous negative space, accessible product audit evidence desk, crisp cut edges, no people, no hands, no logos, no brands, no readable text, no watermark, no UI screenshot, no gradients"
+}

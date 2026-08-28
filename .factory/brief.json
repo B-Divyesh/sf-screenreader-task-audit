@@ -1,0 +1,7 @@
+{
+  "slug": "screenreader-task-audit",
+  "title": "Screenreader Task Audit",
+  "summary": "Record screen-reader task evidence and turn blockers into a reproducible report.",
+  "artifact_class": "web-with-backend",
+  "monetization": "freemium"
+}
