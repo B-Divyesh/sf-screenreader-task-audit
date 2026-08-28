@@ -1,4 +1,12 @@
-# Screenreader Task Audit — repair handoff
+# Screenreader Task Audit — QA handoff
+
+## Independent verification update — 2026-08-28 UTC
+
+**Candidate `e74605ff3597045cb66fa39e5daf231336bdd831`: FAIL — do not release.**
+
+Fresh production evidence at https://screenreader-task-audit.sociobot.in identifies the candidate via `/health`, but fails the mandatory live backend rate-limit check. A fixed-client burst of 50 sequential, then 100 and 400 concurrent harmless `GET /api/reports/<missing-id>` requests produced only 404 responses; none produced `429` or `Retry-After`. The documented allowance is 40 requests/second. This is a high-severity release blocker. See `.factory/verification-2.md` for exact commands, full claim-test results, and the repair acceptance criterion.
+
+All ten claims, `npm run build`, `npm test`, `cargo test`, formatting, Clippy, and TypeScript checks passed locally. First-read/demo, desktop and 390 px mobile, offline service-worker reload, privacy request logging, Axe serious/critical checks, keyboard smoke, response headers, cache policy, and live build identity passed. No product code was changed during this verification.
 
 ## Release status
 
