@@ -91,12 +91,13 @@ test('@claim:anonymous-export removes product and environment names from a JSON 
   expect(contents).not.toContain('NVDA 2026.1');
 });
 
-test('@claim:free-local-storage saves a free audit locally without an API request', async ({ page }) => {
+test('@claim:free-local-storage saves a free audit locally without an API request', async ({ page, baseURL }) => {
   const apiRequests: string[] = [];
   const externalRequests: string[] = [];
+  const productOrigin = new URL(baseURL!).origin;
   page.on('request', request => {
     if (new URL(request.url()).pathname.startsWith('/api/')) apiRequests.push(request.url());
-    if (new URL(request.url()).origin !== 'http://127.0.0.1:4173') externalRequests.push(request.url());
+    if (new URL(request.url()).origin !== productOrigin) externalRequests.push(request.url());
   });
   await page.goto('/audit');
   await page.getByLabel('Audit name').fill('Local-only audit');

@@ -9,10 +9,20 @@ use axum::{
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{
-    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
     SqlitePool,
 };
-use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, time::Duration};
+use std::{
+    env,
+    net::SocketAddr,
+    path::PathBuf,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicI64, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio::signal;
 use tower_http::{
     limit::RequestBodyLimitLayer,
@@ -25,6 +35,7 @@ use uuid::Uuid;
 struct AppState {
     db: SqlitePool,
     build_sha: String,
+    rate_cleanup_after: Arc<AtomicI64>,
     http: reqwest::Client,
 }
 
@@ -205,7 +216,9 @@ async fn rate_limit(State(state): State<AppState>, request: Request, next: Next)
         .unwrap_or("unknown")
         .to_string();
     let now_ms = chrono::Utc::now().timestamp_millis();
-    match record_api_request(&state.db, &key, now_ms).await {
+    let decision = record_api_request(&state.db, &key, now_ms).await;
+    maybe_cleanup_rate_limits(&state, now_ms).await;
+    match decision {
         Ok(hits) if hits <= 40 => next.run(request).await,
         Ok(_) => rate_limit_response(),
         Err(error) => {
@@ -246,12 +259,6 @@ async fn record_api_request(
     .bind(now_ms)
     .fetch_one(db)
     .await?;
-    if hits == 1 {
-        sqlx::query("DELETE FROM api_rate_limits WHERE last_seen_ms < ?")
-            .bind(now_ms - 60_000)
-            .execute(db)
-            .await?;
-    }
     Ok(hits)
 }
 
@@ -265,6 +272,30 @@ fn rate_limit_response() -> Response {
         .headers_mut()
         .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
     response
+}
+
+async fn maybe_cleanup_rate_limits(state: &AppState, now_ms: i64) {
+    let cleanup_after = state.rate_cleanup_after.load(Ordering::Relaxed);
+    if now_ms < cleanup_after
+        || state
+            .rate_cleanup_after
+            .compare_exchange(
+                cleanup_after,
+                now_ms + 3_600_000,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            )
+            .is_err()
+    {
+        return;
+    }
+    if let Err(error) = sqlx::query("DELETE FROM api_rate_limits WHERE last_seen_ms < ?")
+        .bind(now_ms - 3_600_000)
+        .execute(&state.db)
+        .await
+    {
+        tracing::warn!(%error, "could not remove expired rate-limit rows");
+    }
 }
 
 async fn security_headers(request: Request, next: Next) -> Response {
@@ -346,6 +377,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_url = format!("sqlite://{data_dir}/reports.db?mode=rwc");
     let db_options = SqliteConnectOptions::from_str(&db_url)?
         .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Normal)
         .busy_timeout(Duration::from_secs(5));
     let db = SqlitePoolOptions::new()
         .max_connections(5)
@@ -360,6 +393,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         db,
         build_sha,
+        rate_cleanup_after: Arc::new(AtomicI64::new(0)),
         http: reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
             .build()?,
@@ -423,6 +457,7 @@ mod tests {
         AppState {
             db,
             build_sha: "test-sha".into(),
+            rate_cleanup_after: Arc::new(AtomicI64::new(i64::MAX)),
             http: reqwest::Client::new(),
         }
     }
@@ -546,11 +581,13 @@ mod tests {
         let state_one = AppState {
             db: db_one.clone(),
             build_sha: "instance-one".into(),
+            rate_cleanup_after: Arc::new(AtomicI64::new(i64::MAX)),
             http: reqwest::Client::new(),
         };
         let state_two = AppState {
             db: db_two.clone(),
             build_sha: "instance-two".into(),
+            rate_cleanup_after: Arc::new(AtomicI64::new(i64::MAX)),
             http: reqwest::Client::new(),
         };
         let apps = [app(state_one, test_dist()), app(state_two, test_dist())];

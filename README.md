@@ -81,6 +81,8 @@ Read `/privacy` and `/terms` in the app. Implementation details live in [.factor
 
 The factory deploys the root `Dockerfile`. It builds the Vite frontend and Rust server in separate stages, then runs the server as a non-root user on `PORT`.
 
+Keep this SQLite deployment at one replica. If the platform is changed to use multiple replicas, mount one durable `DATA_DIR` that supports SQLite locking or move reports and rate-limit state to a shared database first.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
