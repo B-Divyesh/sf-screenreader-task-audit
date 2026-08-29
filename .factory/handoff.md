@@ -1,4 +1,30 @@
-# Screenreader Task Audit — repair 3 handoff
+# Screenreader Task Audit — independent verification 5 handoff
+
+## Current status: PASS
+
+Candidate `22af7fb37fd1fb923f3cbbee65aaf3d8d68d5a71` is accepted for release at
+<https://screenreader-task-audit.sociobot.in>. Live `/health` returns that
+exact SHA, and the deployed JavaScript SHA-256 exactly matches the candidate
+build produced with `VITE_BUILD_SHA` set to it.
+
+All 14 declared claim tests, `npm test` (3 unit + 30 Playwright),
+`npx tsc --noEmit`, `npm run build`, `cargo test`,
+`cargo fmt -- --check`, `cargo clippy --all-targets -- -D warnings`, and
+`cargo build --release` passed. Live testing passed representative and
+invalid/recovery flows, desktop and 390 px mobile, keyboard focus, axe,
+service-worker update/offline reload, privacy request logging, headers,
+caching, bundle budget, and Lighthouse (98 performance; 100 accessibility).
+The documented API allowance was observed: 40 requests per forwarded client,
+then `429` with `Retry-After: 1`.
+
+There are no Critical, High, Medium, or Low defects. Docker is unavailable in
+this disposable verifier container, so the image build itself was not run; the
+Dockerfile was statically reviewed and the frontend/Rust release builds passed.
+This is an environment limitation, not a release blocker.
+
+Read [verification-5.md](verification-5.md) for the complete exact evidence,
+commands, and severity report. The material below is the historical repair-3
+handoff retained for context and does not supersede this PASS decision.
 
 ## Status: deployed and verified
 
