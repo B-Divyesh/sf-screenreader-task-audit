@@ -2,12 +2,12 @@
 
 ## Status: deployed and verified
 
-Repair commit: `78146aa1af417cad16124689cee29bf31c1173b4`.
+Deployed repair commit: `f7e6c935fb2e7c1dacc95317bc707cf423b08025`.
 
 Live URL: <https://screenreader-task-audit.sociobot.in>
 
 `/health` returns the same full build SHA. The deployment is revision
-`sf-screenreader-task-audit--0000012`, with `minReplicas: 1` and
+`sf-screenreader-task-audit--0000014`, with `minReplicas: 1` and
 `maxReplicas: 1`.
 
 ## Repairs
@@ -52,7 +52,7 @@ Live URL: <https://screenreader-task-audit.sociobot.in>
   limiter_blocks_the_41st_request_with_retry_after` — pass; `cargo test
   claim_backend_rate_limit` — pass.
 - Live identity: `/health` returns
-  `78146aa1af417cad16124689cee29bf31c1173b4`.
+  `f7e6c935fb2e7c1dacc95317bc707cf423b08025`.
 - Live rate limit: `npm run verify:live-rate-limit` — requests 1–40 returned
   `404`; request 41 returned `429` with `Retry-After: 1`.
 - Live response policy: malformed JSON `400`, valid report without license
