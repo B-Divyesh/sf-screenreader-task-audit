@@ -1,5 +1,11 @@
 {
   "minReplicas": 1,
   "maxReplicas": 1,
-  "reason": "The SQLite-backed report and rate-limit store is local to a container. One replica keeps the documented 40-request allowance consistent for each forwarded client address."
+  "persistentVolume": {
+    "name": "audit-data",
+    "storageName": "screenreader-task-audit-data",
+    "storageType": "AzureFile",
+    "mountPath": "/app/data"
+  },
+  "reason": "Reports and rate-limit counters are stored in SQLite. One ready replica and the mounted durable volume keep reports and the documented 40-request allowance consistent."
 }

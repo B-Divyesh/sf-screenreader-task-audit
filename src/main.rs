@@ -655,6 +655,30 @@ mod tests {
         let config: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         assert_eq!(config.get("minReplicas").and_then(Value::as_u64), Some(1));
         assert_eq!(config.get("maxReplicas").and_then(Value::as_u64), Some(1));
+        assert_eq!(
+            config
+                .pointer("/persistentVolume/name")
+                .and_then(Value::as_str),
+            Some("audit-data")
+        );
+        assert_eq!(
+            config
+                .pointer("/persistentVolume/storageName")
+                .and_then(Value::as_str),
+            Some("screenreader-task-audit-data")
+        );
+        assert_eq!(
+            config
+                .pointer("/persistentVolume/storageType")
+                .and_then(Value::as_str),
+            Some("AzureFile")
+        );
+        assert_eq!(
+            config
+                .pointer("/persistentVolume/mountPath")
+                .and_then(Value::as_str),
+            Some("/app/data")
+        );
     }
 
     #[tokio::test]
