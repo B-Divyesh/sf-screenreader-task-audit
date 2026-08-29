@@ -31,14 +31,16 @@ use tower_http::{
 };
 use uuid::Uuid;
 
-// Azure File uses SMB locking. A single connection with SQLite's rollback
-// journal avoids WAL's shared-memory lock files while this one-replica service
-// safely serializes report and limiter writes on the durable mount.
-const DURABLE_SQLITE_CONNECTIONS: u32 = 1;
+// Azure File uses SMB locking, which SQLite cannot safely use for its live
+// database. The one-replica service keeps SQLite on local disk, serializes its
+// work through one connection, and snapshots private reports to Azure File.
+const SQLITE_CONNECTIONS: u32 = 1;
 
 #[derive(Clone)]
 struct AppState {
     db: SqlitePool,
+    database_path: PathBuf,
+    durable_database_path: Option<PathBuf>,
     build_sha: String,
     rate_cleanup_after: Arc<AtomicI64>,
     http: reqwest::Client,
@@ -78,7 +80,21 @@ async fn create_report(
             message: "A team-sharing license is required.".into(),
         })?;
     verify_license(&state.http, license).await?;
-    store_report(&state.db, report).await
+    let created = store_report(&state.db, report).await?;
+    state.sync_durable_database().map_err(ApiError::internal)?;
+    Ok(created)
+}
+
+impl AppState {
+    fn sync_durable_database(&self) -> Result<(), std::io::Error> {
+        if let Some(durable_database_path) = &self.durable_database_path {
+            if let Some(parent) = durable_database_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::copy(&self.database_path, durable_database_path)?;
+        }
+        Ok(())
+    }
 }
 
 async fn store_report(
@@ -378,11 +394,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or(8080);
     let build_sha = env::var("BUILD_SHA").unwrap_or_else(|_| "dev".into());
     let data_dir = env::var("DATA_DIR").unwrap_or_else(|_| "data".into());
+    let durable_data_dir = env::var("DURABLE_DATA_DIR").ok();
     std::fs::create_dir_all(&data_dir)?;
-    let db_url = format!("sqlite://{data_dir}/reports.db?mode=rwc");
+    let database_path = PathBuf::from(&data_dir).join("reports.db");
+    let durable_database_path = durable_data_dir
+        .as_deref()
+        .map(PathBuf::from)
+        .map(|path| path.join("reports.db"));
+    if let Some(durable_database_path) = &durable_database_path {
+        restore_durable_database(durable_database_path, &database_path)?;
+    }
+    let db_url = format!("sqlite://{}?mode=rwc", database_path.display());
     let db_options = durable_sqlite_options(&db_url)?;
     let db = SqlitePoolOptions::new()
-        .max_connections(DURABLE_SQLITE_CONNECTIONS)
+        .max_connections(SQLITE_CONNECTIONS)
         .connect_with(db_options)
         .await?;
     initialize_database(&db).await?;
@@ -390,15 +415,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .bind(chrono::Utc::now().timestamp())
         .execute(&db)
         .await?;
-    tracing::info!(port, %build_sha, data_dir, "configuration loaded; no secret configuration required");
     let state = AppState {
         db,
+        database_path,
+        durable_database_path,
         build_sha,
         rate_cleanup_after: Arc::new(AtomicI64::new(0)),
         http: reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
             .build()?,
     };
+    state.sync_durable_database()?;
+    tracing::info!(port, %state.build_sha, data_dir, durable_snapshot = state.durable_database_path.is_some(), "configuration loaded; no secret configuration required");
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await?;
     axum::serve(
         listener,
@@ -406,6 +434,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )
     .with_graceful_shutdown(shutdown())
     .await?;
+    Ok(())
+}
+
+fn restore_durable_database(
+    durable_database_path: &PathBuf,
+    database_path: &PathBuf,
+) -> Result<(), std::io::Error> {
+    if durable_database_path.is_file() && std::fs::metadata(durable_database_path)?.len() > 0 {
+        if let Some(parent) = database_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(durable_database_path, database_path)?;
+    }
     Ok(())
 }
 
@@ -467,6 +508,8 @@ mod tests {
         initialize_database(&db).await.unwrap();
         AppState {
             db,
+            database_path: PathBuf::new(),
+            durable_database_path: None,
             build_sha: "test-sha".into(),
             rate_cleanup_after: Arc::new(AtomicI64::new(i64::MAX)),
             http: reqwest::Client::new(),
@@ -599,12 +642,16 @@ mod tests {
             .unwrap();
         let state_one = AppState {
             db: db_one.clone(),
+            database_path: PathBuf::new(),
+            durable_database_path: None,
             build_sha: "instance-one".into(),
             rate_cleanup_after: Arc::new(AtomicI64::new(i64::MAX)),
             http: reqwest::Client::new(),
         };
         let state_two = AppState {
             db: db_two.clone(),
+            database_path: PathBuf::new(),
+            durable_database_path: None,
             build_sha: "instance-two".into(),
             rate_cleanup_after: Arc::new(AtomicI64::new(i64::MAX)),
             http: reqwest::Client::new(),
@@ -661,14 +708,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn durable_volume_sqlite_uses_a_rollback_journal_and_one_connection() {
+    async fn local_sqlite_uses_a_rollback_journal_and_one_connection() {
         let db_path = std::env::temp_dir().join(format!(
             "screenreader-task-audit-durable-{}.db",
             Uuid::new_v4()
         ));
         let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
         let db = SqlitePoolOptions::new()
-            .max_connections(DURABLE_SQLITE_CONNECTIONS)
+            .max_connections(SQLITE_CONNECTIONS)
             .connect_with(durable_sqlite_options(&db_url).unwrap())
             .await
             .unwrap();
@@ -676,10 +723,54 @@ mod tests {
             .fetch_one(&db)
             .await
             .unwrap();
-        assert_eq!(DURABLE_SQLITE_CONNECTIONS, 1);
+        assert_eq!(SQLITE_CONNECTIONS, 1);
         assert_eq!(journal_mode, "delete");
         db.close().await;
         std::fs::remove_file(db_path).unwrap();
+    }
+
+    #[test]
+    fn restores_a_nonempty_durable_snapshot_to_the_local_sqlite_path() {
+        let root = std::env::temp_dir().join(format!(
+            "screenreader-task-audit-snapshot-{}",
+            Uuid::new_v4()
+        ));
+        let durable = root.join("durable/reports.db");
+        let local = root.join("local/reports.db");
+        std::fs::create_dir_all(durable.parent().unwrap()).unwrap();
+        std::fs::write(&durable, b"private-report-snapshot").unwrap();
+        restore_durable_database(&durable, &local).unwrap();
+        assert_eq!(std::fs::read(&local).unwrap(), b"private-report-snapshot");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn snapshots_the_local_sqlite_file_to_the_durable_volume() {
+        let root = std::env::temp_dir().join(format!(
+            "screenreader-task-audit-snapshot-copy-{}",
+            Uuid::new_v4()
+        ));
+        let local = root.join("local/reports.db");
+        let durable = root.join("durable/reports.db");
+        std::fs::create_dir_all(local.parent().unwrap()).unwrap();
+        std::fs::write(&local, b"new-private-report-snapshot").unwrap();
+        let mut app_state = state().await;
+        app_state.database_path = local;
+        app_state.durable_database_path = Some(durable.clone());
+        app_state.sync_durable_database().unwrap();
+        assert_eq!(
+            std::fs::read(durable).unwrap(),
+            b"new-private-report-snapshot"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn container_uses_local_sqlite_and_mounts_only_durable_snapshots() {
+        let dockerfile = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Dockerfile");
+        let contents = std::fs::read_to_string(dockerfile).unwrap();
+        assert!(contents.contains("DATA_DIR=/tmp/screenreader-task-audit"));
+        assert!(contents.contains("DURABLE_DATA_DIR=/app/data"));
     }
 
     #[test]

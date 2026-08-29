@@ -23,7 +23,7 @@ WORKDIR /app
 COPY --from=backend /app/target/release/screenreader-task-audit /app/server
 COPY --from=frontend /app/dist /app/dist
 USER app
-ENV PORT=8080 DATA_DIR=/app/data
+ENV PORT=8080 DATA_DIR=/tmp/screenreader-task-audit DURABLE_DATA_DIR=/app/data
 EXPOSE 8080
 ARG BUILD_SHA=dev
 ENV BUILD_SHA=$BUILD_SHA
