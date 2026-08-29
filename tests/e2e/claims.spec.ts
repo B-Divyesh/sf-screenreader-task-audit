@@ -7,7 +7,7 @@ async function createAudit(page: Page): Promise<void> {
   await page.getByLabel('Product or dashboard').fill('Example dashboard');
   await page.getByLabel('Screen reader and version').fill('NVDA 2026');
   await page.getByLabel('Browser and version').fill('Firefox 142');
-  await page.getByLabel(/The tester agreed/).check();
+  await page.getByLabel(/The tester agreed/).check({ force: true });
   await page.getByRole('button', { name: 'Create audit' }).click();
 }
 async function readDownload(download: Download): Promise<string> {
@@ -112,7 +112,7 @@ test('@claim:import-json restores every editable audit field only after confirma
   await page.getByLabel('Product or dashboard').fill('Northstar Billing');
   await page.getByLabel('Screen reader and version').fill('NVDA 2026.1');
   await page.getByLabel('Browser and version').fill('Firefox 142');
-  await page.getByLabel(/The tester agreed/).check();
+  await page.getByLabel(/The tester agreed/).check({ force: true });
   await page.getByRole('button', { name: 'Create audit' }).click();
   await page.getByLabel('Task name').fill('Download an invoice');
   await page.getByLabel('Tester’s goal').fill('Save invoice 1842 as PDF');
@@ -212,9 +212,57 @@ test('@claim:offline-reload demo reloads offline after its first visit', async (
 test('@claim:manual-evidence-not-certification records observations without scans or scores', async ({ page }) => { await page.goto('/'); await expect(page.getByText('It records manual observations. It does not scan a product.')).toBeVisible(); await expect(page.getByText('It does not certify accessibility or provide legal advice.')).toBeVisible(); await expect(page.getByText(/score/i)).toHaveCount(0); });
 
 test('routes have unique metadata, real 404, accessible structure, and 44px targets', async ({ page }) => {
-  const checks: [string, string][] = [['/', 'Screenreader Task Audit — record task evidence'], ['/?demo=1', 'Demo — Screenreader Task Audit'], ['/audit', 'My audit — Screenreader Task Audit'], ['/report', 'Report — Screenreader Task Audit'], ['/demo/report', 'Demo report — Screenreader Task Audit'], ['/privacy', 'Privacy — Screenreader Task Audit'], ['/terms', 'Terms — Screenreader Task Audit'], ['/missing', 'Page not found — Screenreader Task Audit']];
-  for (const [path, title] of checks) { await page.goto(path); await expect(page).toHaveTitle(title); await expect(page.locator('main')).toHaveCount(1); await expect(page.locator('h1')).toHaveCount(1); }
+  const checks: [string, string, string, string][] = [
+    ['/', 'Screenreader Task Audit — record task evidence', 'Record screen-reader task evidence and turn blockers into a clear, prioritized report.', '/'],
+    ['/?demo=1', 'Demo — Screenreader Task Audit', 'Try five sample screen-reader tasks in an isolated browser-only demo.', '/demo'],
+    ['/audit', 'My audit — Screenreader Task Audit', 'Set up and record a local screen-reader task audit.', '/audit'],
+    ['/report', 'Report — Screenreader Task Audit', 'Review and export a prioritized screen-reader task report.', '/report'],
+    ['/demo/report', 'Demo report — Screenreader Task Audit', 'Review the sample screen-reader task report.', '/demo/report'],
+    ['/privacy', 'Privacy — Screenreader Task Audit', 'Learn where Screenreader Task Audit stores task observations.', '/privacy'],
+    ['/terms', 'Terms — Screenreader Task Audit', 'Read the terms for using Screenreader Task Audit.', '/terms'],
+    ['/missing', 'Page not found — Screenreader Task Audit', 'This Screenreader Task Audit page was not found.', '/404']
+  ];
+  const canonicalOrigin = 'https://screenreader-task-audit.sociobot.in';
+  const productionServer = Boolean(process.env.PLAYWRIGHT_BASE_URL);
+  for (const [path, title, description, canonical] of checks) {
+    const response = await page.goto(path);
+    expect(response?.status()).toBe(path === '/missing' && productionServer ? 404 : 200);
+    await expect(page).toHaveTitle(title);
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', description);
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', title);
+    await expect(page.locator('meta[property="og:description"]')).toHaveAttribute('content', description);
+    await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute('content', title);
+    await expect(page.locator('meta[name="twitter:description"]')).toHaveAttribute('content', description);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${canonicalOrigin}${canonical}`);
+    await expect(page.locator('main')).toHaveCount(1);
+    await expect(page.locator('h1')).toHaveCount(1);
+    await expect(page.getByRole('link', { name: 'Privacy', exact: true }).first()).toHaveAttribute('href', '/privacy');
+    await expect(page.getByRole('link', { name: 'Terms', exact: true })).toHaveAttribute('href', '/terms');
+  }
   await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/?demo=1'); expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390); for (const box of await page.locator('a,button').evaluateAll(elements => elements.map(element => { const box = element.getBoundingClientRect(); return { width: box.width, height: box.height }; }))) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+});
+test('shared report metadata distinguishes loaded and missing reports', async ({ page }) => {
+  const loadedId = '0123456789abcdef0123456789abcdef';
+  await page.route(`**/api/reports/${loadedId}`, route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      audit: 'Shared October audit', product: 'Northstar Billing', environment: 'NVDA 2026.1 · Firefox 142',
+      tasks: [{ title: 'Download an invoice', severity: 'high', outcome: 'partial', goal: 'Save a PDF', announced: 'Menu announced', focus: 'Focus moved', blocker: 'Completion was silent' }]
+    })
+  }));
+  await page.goto(`/share/${loadedId}`);
+  await expect(page).toHaveTitle('Shared report — Screenreader Task Audit');
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', 'Shared report — Screenreader Task Audit');
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', 'Read a shared screen-reader task report.');
+  await expect(page.getByRole('heading', { name: 'Shared October audit' })).toBeVisible();
+
+  const missingId = 'fedcba9876543210fedcba9876543210';
+  await page.route(`**/api/reports/${missingId}`, route => route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"missing"}' }));
+  await page.goto(`/share/${missingId}`);
+  await expect(page).toHaveTitle('Page not found — Screenreader Task Audit');
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', 'Page not found — Screenreader Task Audit');
+  await expect(page.getByRole('heading', { name: 'This page was not found' })).toBeVisible();
 });
 test('all public routes have no serious accessibility findings or console errors', async ({ page }) => { const errors: string[] = []; page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); }); for (const path of ['/', '/?demo=1', '/demo/report', '/privacy', '/terms']) { await page.goto(path); const result = await new AxeBuilder({ page }).analyze(); expect(result.violations.filter(issue => ['serious', 'critical'].includes(issue.impact || ''))).toEqual([]); } expect(errors).toEqual([]); await page.goto('/missing'); const result = await new AxeBuilder({ page }).analyze(); expect(result.violations.filter(issue => ['serious', 'critical'].includes(issue.impact || ''))).toEqual([]); });
 test('keyboard navigation moves focus to each new heading', async ({ page }) => { await page.goto('/'); await page.keyboard.press('Tab'); await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused(); await page.keyboard.press('Enter'); await expect(page.locator('main')).toBeFocused(); await page.getByRole('link', { name: 'Demo', exact: true }).press('Enter'); await expect(page.locator('h1')).toBeFocused(); });
