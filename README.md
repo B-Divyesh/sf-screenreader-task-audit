@@ -70,7 +70,7 @@ Open <http://localhost:8080/?demo=1> and check <http://localhost:8080/health>.
 
 The axum server serves `dist/` and exposes `GET /health`. A verified team-sharing license is required to create a private report link. Report API routes validate a report body before storage. They allow no more than five tasks and a 200 KB encoded body.
 
-API routes accept a burst of 40 requests from the first `X-Forwarded-For` address. One idle second resets the allowance. Limited responses return `429` and `Retry-After: 1`. The SQLite-backed report and limiter store live on the mounted Azure File volume at `/app/data`. The versioned [container deployment contract](.factory/container-scale.json) requires that durable mount and exactly one ready replica.
+API routes accept a burst of 40 requests from the first `X-Forwarded-For` address. One idle second resets the allowance. Limited responses return `429` and `Retry-After: 1`. The SQLite-backed report and limiter store use one connection with SQLite’s rollback journal on the mounted Azure File volume at `/app/data`. The versioned [container deployment contract](.factory/container-scale.json) requires that durable mount and exactly one ready replica.
 
 After deployment, verify that public boundary with:
 

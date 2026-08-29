@@ -31,6 +31,11 @@ use tower_http::{
 };
 use uuid::Uuid;
 
+// Azure File uses SMB locking. A single connection with SQLite's rollback
+// journal avoids WAL's shared-memory lock files while this one-replica service
+// safely serializes report and limiter writes on the durable mount.
+const DURABLE_SQLITE_CONNECTIONS: u32 = 1;
+
 #[derive(Clone)]
 struct AppState {
     db: SqlitePool,
@@ -360,7 +365,7 @@ fn app(state: AppState, dist: PathBuf) -> Router {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let log_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
     tracing_subscriber::fmt()
@@ -375,13 +380,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = env::var("DATA_DIR").unwrap_or_else(|_| "data".into());
     std::fs::create_dir_all(&data_dir)?;
     let db_url = format!("sqlite://{data_dir}/reports.db?mode=rwc");
-    let db_options = SqliteConnectOptions::from_str(&db_url)?
-        .create_if_missing(true)
-        .journal_mode(SqliteJournalMode::Wal)
-        .synchronous(SqliteSynchronous::Normal)
-        .busy_timeout(Duration::from_secs(5));
+    let db_options = durable_sqlite_options(&db_url)?;
     let db = SqlitePoolOptions::new()
-        .max_connections(5)
+        .max_connections(DURABLE_SQLITE_CONNECTIONS)
         .connect_with(db_options)
         .await?;
     initialize_database(&db).await?;
@@ -406,6 +407,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_graceful_shutdown(shutdown())
     .await?;
     Ok(())
+}
+
+fn durable_sqlite_options(
+    db_url: &str,
+) -> Result<SqliteConnectOptions, Box<dyn std::error::Error + Send + Sync>> {
+    Ok(SqliteConnectOptions::from_str(db_url)?
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Delete)
+        .synchronous(SqliteSynchronous::Normal)
+        .busy_timeout(Duration::from_secs(5)))
 }
 
 async fn initialize_database(db: &SqlitePool) -> Result<(), sqlx::Error> {
@@ -646,6 +657,28 @@ mod tests {
 
         db_one.close().await;
         db_two.close().await;
+        std::fs::remove_file(db_path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn durable_volume_sqlite_uses_a_rollback_journal_and_one_connection() {
+        let db_path = std::env::temp_dir().join(format!(
+            "screenreader-task-audit-durable-{}.db",
+            Uuid::new_v4()
+        ));
+        let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+        let db = SqlitePoolOptions::new()
+            .max_connections(DURABLE_SQLITE_CONNECTIONS)
+            .connect_with(durable_sqlite_options(&db_url).unwrap())
+            .await
+            .unwrap();
+        let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(DURABLE_SQLITE_CONNECTIONS, 1);
+        assert_eq!(journal_mode, "delete");
+        db.close().await;
         std::fs::remove_file(db_path).unwrap();
     }
 
