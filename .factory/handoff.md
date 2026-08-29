@@ -1,3 +1,39 @@
+# Adversarial first-read review 3 handoff — FAIL
+
+**Date:** 2026-08-29
+
+**Reviewed repository:** `db4221233ab4e7155d86b836176c1498588d19f1`
+
+**Live build:** `7e14629264bec2f84a18b93ec9924dfbb5437382`
+
+**Report:** [.factory/review-3.md](review-3.md)
+
+## Result
+
+The cold first read, one-click demo, local/demo isolation, offline behavior, routing, accessibility, live rate limit, and checkout handoff pass. All 19 exact commands in `.factory/claims.json` pass independently from a clean clone, and all 54 Playwright checks pass against the live origin.
+
+The review verdict is **FAIL** with five blocking regressions and one minor finding. The paid team-sharing browser claim mocks report creation and retrieval instead of exercising the real backend. Paid-link durability and card/payment boundaries are not fully represented in the claims manifest. The static 404 uses a stale incomplete footer, and the README again has a sentence above the 22-word limit. The normal footer also says “Visit Param Factory” instead of the required “Built by Param Factory.”
+
+## Verification performed
+
+```sh
+npm ci
+# Every exact .factory/claims.json command, run separately
+PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e
+RATE_LIMIT_CLIENT_IP=198.51.100.173 npm run verify:live-rate-limit
+npm run verify:live-checkout
+/opt/fleet/lib/verify-url.sh https://screenreader-task-audit.sociobot.in/ <output-dir>
+/opt/fleet/lib/verify-url.sh https://screenreader-task-audit.sociobot.in/demo <output-dir>
+```
+
+Direct fresh-context checks covered 390 × 844 and 1440 × 900 first screens, demo editing/reset/exit, browser-storage namespaces, same-origin requests, console errors, route and asset status, and the live checkout redirect. No product code was changed.
+
+## Next steps
+
+Repair F-1-5, F-1-11, F-1-12, F-1-17, F-1-19, and F-3-1 exactly as specified in the review. The next reviewer must rerun the whole checklist rather than only those findings.
+
+---
+
 # Independent verification 12 handoff — PASS
 
 **Date:** 2026-08-29
