@@ -1,0 +1,14 @@
+{
+  "url": "https://screenreader-task-audit.sociobot.in/",
+  "loadMs": 551,
+  "errors": [],
+  "a11y": {
+    "title": "Screenreader Task Audit — record task evidence",
+    "lang": "en",
+    "h1": 1,
+    "main": true,
+    "imgsMissingAlt": 0,
+    "buttonsUnlabeled": 0,
+    "textLength": 1763
+  }
+}
