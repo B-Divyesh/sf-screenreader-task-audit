@@ -1,54 +1,44 @@
-# Screenreader Task Audit — polish 1 handoff
+# Screenreader Task Audit — verification 4 handoff
 
-## Status: deployed and verified
+## Status: FAIL — do not release
 
-Runtime repair commit: `1e31b77a8fc5df228e6fee7db7f0823ac0af56b8`.
+Candidate `53f9247c104641aabef42d4a0c601d5f5ff53cb9` was independently tested on 29 August 2026 at <https://screenreader-task-audit.sociobot.in>.
 
-The deployed Container App runs `sociobotregistry.azurecr.io/sf-screenreader-task-audit:1e31b77a8fc5-sha`, revision `sf-screenreader-task-audit--0000009`, with one replica. At handoff, <https://screenreader-task-audit.sociobot.in/health> returned that exact build SHA.
+The live deployment is the candidate: `/health` returned the full SHA, and live HTML, JS, and CSS were byte-identical to a fresh candidate-stamped build.
 
-## What changed
+## Release blockers
 
-- Added an isolated one-click `?demo=1` flow with banner, reset, and discard-on-leave behavior.
-- Fixed demo/real active-task isolation and added full persistence coverage.
-- Rewrote first-screen and supporting copy in plain words; added the verb-first catalog description.
-- Removed the unavailable paid checkout and unsupported 30-day link promise.
-- Added JSON import with schema validation, five-task cap, preview, and explicit restore.
-- Added complete claims inventory and observable claim tests.
-- Added per-route metadata, real static 404 shell, sitemap routes, external-link cues, and 44 px link targets.
-- Preserved the risograph evidence-desk visual system and original generated artwork.
+1. The live API did not rate-limit one client. A 100-request concurrent burst returned 100 × 404 and 0 × 429; separate 70-request sequential runs also returned no 429. The documented allowance is 40. The same release binary locally returned 40 × 404 then 30 × 429 with `Retry-After: 1`.
+2. A fresh direct `/demo` load reads and writes `sra:audit:v1` before using `demo:sra:audit:v1`. With an existing real audit it still reads the real key. This violates the required demo isolation boundary and the “nothing is saved” banner.
+3. The green `@claim:demo-sandbox` test does not catch this because it creates a real audit before entering demo and does not instrument storage access.
 
-## Verification
+See `.factory/verification-4.md` for exact commands, evidence, all claim results, and lower-severity findings.
 
-Fresh clone `/tmp/sra-clean-1`:
+## Checks that passed
 
-```sh
-npm ci
-npm test                    # 3 unit + 30 browser runs passed
-cargo test                  # 7 backend tests passed
-```
+- All 14 commands in `.factory/claims.json` after `npm ci`.
+- `npm test`: 3 unit + 30 browser runs.
+- Live Playwright: 30/30.
+- `npx tsc --noEmit` and candidate-stamped `npm run build`.
+- `cargo test`: 7/7; fmt, clippy, and release build.
+- Cold first read and one-click populated sample.
+- Desktop and 390 px mobile; keyboard, visible focus, reduced motion, light/dark Axe, offline reload, service-worker update, and no console/page errors.
+- Live privacy request capture stayed same-origin.
+- Lighthouse mobile `/demo`: 99 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 1.4 s and CLS 0.
+- Response security and cache headers; real 404; initial JS/CSS/image budgets.
 
-Repository checks:
+## Additional gaps
 
-```sh
-npm run build               # dist/ emitted; JS 10.09 KB gzip, CSS 3.42 KB gzip
-npx tsc --noEmit
-npm test                    # passed
-cargo test                  # 7 passed
-cargo fmt -- --check
-cargo clippy --all-targets -- -D warnings
-cargo build --release
-```
+- The researched paid collaborative-report flow is absent from the UI.
+- The backend body-validation claim is tested internally rather than through the public authenticated route.
+- The service worker would cache successful private report API responses beyond server expiry.
+- No container engine was installed, so the Docker image could not be rebuilt; the exact frontend and release-binary stages were run directly.
 
-Every command listed in `.factory/claims.json` was run after `npm ci`; browser claim commands passed in desktop Chromium and the 390 × 844 mobile project. Live `PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e` passed all 30 browser runs.
+## Verification artifacts
 
-Live cold checks also confirmed:
+- `.factory/verification-4.md`
+- `.factory/evidence/verification-4/verify.json`
+- `.factory/evidence/verification-4/screenshot-desktop.png`
+- `.factory/evidence/verification-4/screenshot-mobile.png`
 
-- `?demo=1` loads the isolated sample with its persistent banner.
-- `/`, `?demo=1`, `/demo/report`, `/audit`, `/report`, `/privacy`, `/terms`, and `/missing` have the expected titles, landmarks, focus behavior, and no serious/critical Axe findings.
-- The 390 px live demo has no horizontal overflow; screenshots are in `.factory/evidence/`.
-- Fixed-IP live rate burst: 40 × 404, 60 × 429, and every limited response carried `Retry-After: 1`.
-- The server returns `200` for known routes, a real `404` for unknown routes, and build SHA `1e31b77a8fc5df228e6fee7db7f0823ac0af56b8` from `/health`.
-
-## Known gaps
-
-None. Team sharing is deliberately not offered until the factory registers a checkout product and provisions durable shared storage; this repair makes no paid or durability claim.
+No product code was modified.
