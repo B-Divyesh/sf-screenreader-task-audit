@@ -1,44 +1,54 @@
-# Polish round 2 handoff
+# Independent verification 6 handoff
 
-## Status: PASS
+## Status: FAIL
 
-All 24 cumulative findings are closed. JSON backup restore no longer loses the screen reader, browser, creation time, task fields, or event traces. Shared and missing report routes also have complete metadata. The consent-path claim now uses the native keyboard interaction it promises to support.
+Candidate `3fc865bc5205c82c1e8a6b0b4532f5b27010e513` at
+<https://screenreader-task-audit.sociobot.in> is **not releasable**.
 
-## Shipped changes
+Two High, release-blocking defects remain:
 
-- JSON exports contain separate `assistiveTech` and `browser` fields. Anonymous exports replace both with `Withheld`.
-- JSON import restores every editable setup, task, and trace field after an explicit preview and confirmation. It preserves `created` and supports older combined `environment` exports.
-- The import claim now creates a complete audit, exports it, opens a second clean browser context, confirms the restore, reloads, and compares storage, setup, and report output.
-- Shared-report routing now sets its own title, description, canonical, Open Graph, and Twitter metadata. A missing shared ID uses the 404 metadata.
-- Route tests now verify every metadata field, legal link, live 404 status, semantic shell, mobile overflow, and 44 px targets.
-- The catalog description is: “Record screen-reader task evidence and rank blockers for repair.” It is verb-first and 64 characters.
-- The risograph evidence-desk visual system, original art, local-first storage, demo namespace, and Rust/axum container class are unchanged.
+1. The live API does not enforce its documented burst of 40 requests per
+   forwarded client. The repository verifier received 404 on request 41; fresh
+   sequential and concurrent probes reached 45 and 100 requests with no 429 or
+   `Retry-After`. The same candidate binary limits request 41 correctly when
+   run locally, so investigate ingress identity and deployed replica/storage
+   behavior.
+2. The real static 404 page fails dark-mode axe contrast at serious severity.
+   Six links are `#1559d6` on `#222832` (2.42:1). Its focus outline uses the
+   same insufficient color. The candidate and live 404 assets match exactly.
 
-## Verification
+The full evidence and all lower-severity findings are in
+[`.factory/verification-6.md`](verification-6.md).
 
-Tested source: `85bac86f9fe8eb9aa20c55c06b725c50b8cb7a3d`.
+## What passed
 
-- Clean clone: all 14 commands in `.factory/claims.json` passed independently.
-- `npm test`: 4 unit tests and 32 Playwright runs passed across desktop and 390 × 844 mobile Chromium.
-- `npx tsc --noEmit`: passed.
-- `npm run build`: passed; `dist/` produced. Initial JS is 32.97 KB raw / 10.32 KB gzip. CSS is 10.88 KB raw / 3.42 KB gzip. The hero image is 148 KB.
-- `cargo fmt -- --check`: passed.
-- `cargo clippy --all-targets -- -D warnings`: passed.
-- `cargo test`: 7/7 passed.
-- `cargo build --release`: passed.
-- Live browser suite: 32/32 passed against `https://screenreader-task-audit.sociobot.in` after deployment.
-- Live URL verification passed on `/` and `/?demo=1` with no console errors. Evidence is under `.factory/evidence/polish-2-landing/` and `.factory/evidence/polish-2-demo/`.
-- Live route check: every documented route returned 200; `/missing` returned 404.
-- Live rate limit: a 100-request concurrent burst returned exactly 40 × 404 and 60 × 429. `Retry-After: 1` was present; a request after 1.1 seconds returned 404.
-- Lighthouse mobile: performance 100, accessibility 100, best practices 100, SEO 100; LCP 1,091 ms, CLS 0, TBT 32 ms. See `.factory/lighthouse.json`.
+- Mandatory first read and one-click sample-data demo.
+- All 14 exact claim commands from `.factory/claims.json`.
+- `npm test`: 4 unit + 32 Playwright runs.
+- Live Playwright suite: 32/32 on desktop and 390 px mobile.
+- TypeScript, Vite production build, Rust formatting/lint/tests/release build.
+- Candidate identity: `/health` reports the exact SHA; live JS/CSS match the
+  candidate-stamped build byte-for-byte.
+- Core audit, consent, local persistence, limits, invalid-input recovery,
+  prioritized report, HTML/JSON exports, and anonymization.
+- Same-origin privacy boundary, secure response headers, keyboard use, reduced
+  motion, service-worker update, and offline demo reload.
+- Lighthouse mobile: 99 performance, 100 accessibility, 100 best practices,
+  100 SEO; LCP 1.236 s, CLS 0, TBT 119 ms.
 
-## Deployment
+## Verification limitation
 
-- Live: <https://screenreader-task-audit.sociobot.in/?demo=1>
-- Image: `sociobotregistry.azurecr.io/sf-screenreader-task-audit:85bac86f9fe8`
-- Health: `{"status":"ok","build_sha":"85bac86f9fe8eb9aa20c55c06b725c50b8cb7a3d"}`
-- Container App scaling is one replica (`min=1`, `max=1`), preserving the shared SQLite rate-limit boundary.
+Docker is unavailable in this container. The Dockerfile was inspected; its
+frontend and optimized Rust build stages passed directly. The release binary
+started with no configuration other than `PATH`, listened on default port
+8080, and passed local health and rate-limit checks.
 
-## Known gaps and next steps
+## Required next steps
 
-None for the published product contract or cumulative review findings.
+1. Restore live 429 behavior and prove request 41 returns 429 with
+   `Retry-After: 1` through the public ingress.
+2. Fix and retest the real 404 page in dark mode.
+3. Address the brief's missing paid collaboration flow and strengthen the
+   public backend-validation test before the next verification.
+
+No product code was modified during this verification.
