@@ -1,7 +1,7 @@
 # Independent verification 4 — FAIL
 
-**Candidate:** `53f9247c104641aabef42d4a0c601d5f5ff53cb9`  
-**Live URL:** <https://screenreader-task-audit.sociobot.in>  
+**Candidate:** `53f9247c104641aabef42d4a0c601d5f5ff53cb9`
+**Live URL:** <https://screenreader-task-audit.sociobot.in>
 **Verified:** 2026-08-29 UTC
 
 ## Verdict
