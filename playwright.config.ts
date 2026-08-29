@@ -24,5 +24,5 @@ export default defineConfig({
     ? undefined
     // A clean checkout compiles the Rust server after the Vite build. The
     // default 60-second startup allowance is not enough on a cold cache.
-    : { command: 'npm run build && cargo run', port: 8080, timeout: 300_000, reuseExistingServer: true }
+    : { command: 'npm run build && node scripts/run-e2e-server.mjs', port: 8080, timeout: 300_000, reuseExistingServer: true }
 });

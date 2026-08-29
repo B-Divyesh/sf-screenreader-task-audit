@@ -39,7 +39,7 @@ action says what happens next beside the button.
 | Download accessible HTML or JSON. | 6 | `free-audit-features`, `html-export`, `json-export` |
 | Create a private link for a teammate. | 7 | `team-sharing` |
 | They do not need an account. | 6 | `team-sharing` |
-| Sociobot and Dodo handle checkout and refunds. | 7 | `team-sharing`, `license-revocation` |
+| Sociobot and Dodo handle checkout and refunds. | 7 | `payment-boundary`, `license-revocation` |
 | HTML and JSON exports stay free. | 6 | `free-audit-features` |
 | Paste a team-sharing license before verifying it. | 7 | `license-restore-feedback` |
 | This team-sharing license is not active. Check the token or choose Buy team sharing. Free exports still work. | 17 | `license-restore-feedback`, `free-audit-features` |
@@ -57,16 +57,16 @@ action says what happens next beside the button.
 | The local audit does not send task content to a server. | 10 | `privacy-boundaries` |
 | Creating a private link sends the reviewed report to this service. | 11 | `team-sharing` |
 | License checks send only the license token to Sociobot. | 9 | `license-restore-feedback` |
-| Sociobot and Dodo handle checkout, payment details, license checks, and refunds. | 10 | `team-sharing`, `license-revocation` |
-| This product does not receive card details. | 7 | `privacy-boundaries` |
+| Sociobot and Dodo handle checkout, payment details, license checks, and refunds. | 10 | `payment-boundary`, `license-revocation` |
+| This product does not receive card details. | 7 | `payment-boundary` |
 | A shared link can be opened by anyone you give it to. | 11 | `team-sharing` |
 | Export JSON to make a local backup. | 8 | `json-export` |
 | Import it later to restore the setup and every editable task. | 11 | `import-json` |
 | Clear this site’s browser storage to remove a local audit and saved license. | 13 | Browser-storage instruction |
 | The tool structures screen-reader task evidence and creates reports. | 9 | `core-workflow` |
 | Team sharing is a one-time $39 purchase. | 7 | `team-sharing` |
-| Sociobot and Dodo are the merchant of record. | 8 | `team-sharing` |
-| Their checkout handles refunds. | 4 | `team-sharing`, `license-revocation` |
+| Sociobot and Dodo are the merchant of record. | 8 | `payment-boundary` |
+| Their checkout handles refunds. | 4 | `payment-boundary`, `license-revocation` |
 | A refund revokes the license. | 5 | `license-revocation` |
 | The free local audit works without an account. | 8 | `free-audit-features` |
 | The software is provided as is under the MIT License. | 9 | Legal notice; repository `LICENSE` |
@@ -85,5 +85,13 @@ action says what happens next beside the button.
 | Paid collaboration URL | private link |
 | Purchase credential | team-sharing license |
 
-Catalog description: “Record screen-reader task evidence and rank blockers for
-repair.” It starts with a verb and is 64 characters.
+## README regression check
+
+The deployment instructions now use three sentences: “Apply
+`.factory/container-scale.json` during deployment.” (four words), “Mount
+`screenreader-task-audit-data` at `/app/data`.” (four words), and “Keep one
+ready replica unless reports and rate-limit state use a shared database.” (12
+words). Every README sentence is at most 22 words.
+
+Catalog description: “Record screen-reader task evidence and review blockers
+in priority order.” It starts with a verb and is 73 characters.

@@ -1,1 +1,1 @@
-Record screen-reader task evidence and rank blockers for repair.
+Record screen-reader task evidence and review blockers in priority order.

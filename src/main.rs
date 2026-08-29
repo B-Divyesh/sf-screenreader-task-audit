@@ -41,6 +41,7 @@ struct AppState {
     db: SqlitePool,
     database_path: PathBuf,
     durable_database_path: Option<PathBuf>,
+    license_verify_url: String,
     build_sha: String,
     rate_cleanup_after: Arc<AtomicI64>,
     http: reqwest::Client,
@@ -79,7 +80,7 @@ async fn create_report(
             status: StatusCode::PAYMENT_REQUIRED,
             message: "A team-sharing license is required.".into(),
         })?;
-    verify_license(&state.http, license).await?;
+    verify_license(&state.http, &state.license_verify_url, license).await?;
     let created = store_report(&state.db, report).await?;
     state.sync_durable_database().map_err(ApiError::internal)?;
     Ok(created)
@@ -125,8 +126,11 @@ async fn store_report(
     ))
 }
 
-async fn verify_license(client: &reqwest::Client, license: &str) -> Result<(), ApiError> {
-    let url = "https://api.sociobot.in/api/v1/products/screenreader-task-audit/verify";
+async fn verify_license(
+    client: &reqwest::Client,
+    url: &str,
+    license: &str,
+) -> Result<(), ApiError> {
     let response = client
         .get(url)
         .query(&[("license", license)])
@@ -395,6 +399,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let build_sha = env::var("BUILD_SHA").unwrap_or_else(|_| "dev".into());
     let data_dir = env::var("DATA_DIR").unwrap_or_else(|_| "data".into());
     let durable_data_dir = env::var("DURABLE_DATA_DIR").ok();
+    let sociobot_api_base =
+        env::var("SOCIOBOT_API_BASE").unwrap_or_else(|_| "https://api.sociobot.in/api/v1".into());
+    let license_verify_url = format!(
+        "{}/products/screenreader-task-audit/verify",
+        sociobot_api_base.trim_end_matches('/')
+    );
     std::fs::create_dir_all(&data_dir)?;
     let database_path = PathBuf::from(&data_dir).join("reports.db");
     let durable_database_path = durable_data_dir
@@ -419,6 +429,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         db,
         database_path,
         durable_database_path,
+        license_verify_url,
         build_sha,
         rate_cleanup_after: Arc::new(AtomicI64::new(0)),
         http: reqwest::Client::builder()
@@ -495,8 +506,10 @@ mod tests {
     use super::*;
     use axum::{
         body::{to_bytes, Body},
+        extract::Query,
         http::Request,
     };
+    use std::collections::HashMap;
     use tower::ServiceExt;
 
     async fn state() -> AppState {
@@ -510,6 +523,8 @@ mod tests {
             db,
             database_path: PathBuf::new(),
             durable_database_path: None,
+            license_verify_url:
+                "https://api.sociobot.in/api/v1/products/screenreader-task-audit/verify".into(),
             build_sha: "test-sha".into(),
             rate_cleanup_after: Arc::new(AtomicI64::new(i64::MAX)),
             http: reqwest::Client::new(),
@@ -531,6 +546,58 @@ mod tests {
         .unwrap();
         std::fs::write(path.join("assets/app-123.js"), "console.log('asset')").unwrap();
         path
+    }
+
+    async fn recorded_license_verifier() -> (String, tokio::task::JoinHandle<()>) {
+        async fn verify(Query(query): Query<HashMap<String, String>>) -> Json<Value> {
+            let valid = query.get("license").is_some_and(|token| {
+                matches!(
+                    token.as_str(),
+                    "team-license-fixture" | "durable-license-fixture"
+                )
+            });
+            Json(if valid {
+                serde_json::json!({"valid": true, "reason": "ok"})
+            } else {
+                serde_json::json!({"valid": false, "reason": "invalid"})
+            })
+        }
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, Router::new().route("/verify", get(verify)))
+                .await
+                .unwrap();
+        });
+        (format!("http://{address}/verify"), task)
+    }
+
+    async fn persistent_state(
+        database_path: PathBuf,
+        durable_database_path: Option<PathBuf>,
+        license_verify_url: String,
+        build_sha: &str,
+    ) -> AppState {
+        std::fs::create_dir_all(database_path.parent().unwrap()).unwrap();
+        let database_url = format!("sqlite://{}?mode=rwc", database_path.display());
+        let db = SqlitePoolOptions::new()
+            .max_connections(SQLITE_CONNECTIONS)
+            .connect_with(durable_sqlite_options(&database_url).unwrap())
+            .await
+            .unwrap();
+        initialize_database(&db).await.unwrap();
+        AppState {
+            db,
+            database_path,
+            durable_database_path,
+            license_verify_url,
+            build_sha: build_sha.into(),
+            rate_cleanup_after: Arc::new(AtomicI64::new(i64::MAX)),
+            http: reqwest::Client::new(),
+        }
     }
     #[tokio::test]
     async fn health_returns_build_sha() {
@@ -590,6 +657,149 @@ mod tests {
             StatusCode::BAD_REQUEST
         );
     }
+
+    #[tokio::test]
+    async fn claim_private_report_durability() {
+        let (license_verify_url, verifier) = recorded_license_verifier().await;
+        let root = std::env::temp_dir().join(format!(
+            "screenreader-task-audit-private-report-{}",
+            Uuid::new_v4()
+        ));
+        let first_local = root.join("first/reports.db");
+        let second_local = root.join("second/reports.db");
+        let third_local = root.join("third/reports.db");
+        let durable = root.join("durable/reports.db");
+        let first_state = persistent_state(
+            first_local,
+            Some(durable.clone()),
+            license_verify_url.clone(),
+            "first-process",
+        )
+        .await;
+        let first_db = first_state.db.clone();
+        let first_app = app(first_state, test_dist());
+        let report = serde_json::json!({
+            "schema": "screenreader-task-audit/v1",
+            "audit": "Durable team report",
+            "product": "Northstar Metrics",
+            "tasks": [{"title": "Change the report date range"}]
+        });
+        let created = first_app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/reports")
+                    .header("content-type", "application/json")
+                    .header("authorization", "Bearer durable-license-fixture")
+                    .header("x-forwarded-for", "198.51.100.61")
+                    .body(Body::from(serde_json::to_vec(&report).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(created.status(), StatusCode::CREATED);
+        let created_body: Value =
+            serde_json::from_slice(&to_bytes(created.into_body(), 4096).await.unwrap()).unwrap();
+        let id = created_body.get("id").and_then(Value::as_str).unwrap();
+        let expires_at = chrono::DateTime::parse_from_rfc3339(
+            created_body
+                .get("expires_at")
+                .and_then(Value::as_str)
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(expires_at.timestamp() >= chrono::Utc::now().timestamp() + 29 * 86_400);
+        assert!(durable.is_file());
+
+        // Closing the first pool and restoring into a different local path models
+        // a replaced container process reading the mounted durable snapshot.
+        drop(first_app);
+        first_db.close().await;
+        restore_durable_database(&durable, &second_local).unwrap();
+        let second_state = persistent_state(
+            second_local,
+            Some(durable.clone()),
+            license_verify_url.clone(),
+            "second-process",
+        )
+        .await;
+        let second_db = second_state.db.clone();
+        let second_app = app(second_state.clone(), test_dist());
+        let restored = second_app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/reports/{id}"))
+                    .header("x-forwarded-for", "198.51.100.62")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(restored.status(), StatusCode::OK);
+        let restored_body: Value =
+            serde_json::from_slice(&to_bytes(restored.into_body(), 4096).await.unwrap()).unwrap();
+        assert_eq!(restored_body, report);
+
+        sqlx::query("UPDATE reports SET expires_at = ? WHERE id = ?")
+            .bind(chrono::Utc::now().timestamp() - 1)
+            .bind(id)
+            .execute(&second_db)
+            .await
+            .unwrap();
+        second_state.sync_durable_database().unwrap();
+        drop(second_app);
+        second_db.close().await;
+
+        restore_durable_database(&durable, &third_local).unwrap();
+        let third_state =
+            persistent_state(third_local, None, license_verify_url, "third-process").await;
+        let third_db = third_state.db.clone();
+        let expired = app(third_state, test_dist())
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/reports/{id}"))
+                    .header("x-forwarded-for", "198.51.100.63")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(expired.status(), StatusCode::NOT_FOUND);
+        third_db.close().await;
+
+        let deployment: Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".factory/container-scale.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            deployment.get("minReplicas").and_then(Value::as_u64),
+            Some(1)
+        );
+        assert_eq!(
+            deployment.get("maxReplicas").and_then(Value::as_u64),
+            Some(1)
+        );
+        assert_eq!(
+            deployment
+                .pointer("/persistentVolume/storageName")
+                .and_then(Value::as_str),
+            Some("screenreader-task-audit-data")
+        );
+        assert_eq!(
+            deployment
+                .pointer("/persistentVolume/mountPath")
+                .and_then(Value::as_str),
+            Some("/app/data")
+        );
+
+        verifier.abort();
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[tokio::test]
     async fn limiter_blocks_the_41st_request_with_retry_after() {
         let app = app(state().await, test_dist());
@@ -644,6 +854,8 @@ mod tests {
             db: db_one.clone(),
             database_path: PathBuf::new(),
             durable_database_path: None,
+            license_verify_url:
+                "https://api.sociobot.in/api/v1/products/screenreader-task-audit/verify".into(),
             build_sha: "instance-one".into(),
             rate_cleanup_after: Arc::new(AtomicI64::new(i64::MAX)),
             http: reqwest::Client::new(),
@@ -652,6 +864,8 @@ mod tests {
             db: db_two.clone(),
             database_path: PathBuf::new(),
             durable_database_path: None,
+            license_verify_url:
+                "https://api.sociobot.in/api/v1/products/screenreader-task-audit/verify".into(),
             build_sha: "instance-two".into(),
             rate_cleanup_after: Arc::new(AtomicI64::new(i64::MAX)),
             http: reqwest::Client::new(),

@@ -90,7 +90,7 @@ Read `/privacy` and `/terms` in the app. Implementation details live in [.factor
 
 ## Deploy
 
-The factory deploys the root `Dockerfile`. It builds the Vite frontend and Rust server in separate stages. The runtime listens on `PORT` as a non-root user. Deployment must apply `.factory/container-scale.json`: mount `screenreader-task-audit-data` at `/app/data` and keep this SQLite deployment at exactly one ready replica unless reports and rate-limit state move to a shared database.
+The factory deploys the root `Dockerfile`. It builds the Vite frontend and Rust server in separate stages. The runtime listens on `PORT` as a non-root user. Apply `.factory/container-scale.json` during deployment. Mount `screenreader-task-audit-data` at `/app/data`. Keep one ready replica unless reports and rate-limit state use a shared database.
 
 ## License
 

@@ -1,4 +1,4 @@
-const CACHE = 'screenreader-task-audit-v5';
+const CACHE = 'screenreader-task-audit-v6';
 self.addEventListener('install', event => event.waitUntil((async () => {
   const cache = await caches.open(CACHE);
   const page = await fetch('/');

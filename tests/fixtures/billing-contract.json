@@ -1,0 +1,23 @@
+{
+  "recorded_at": "2026-08-29T00:00:00Z",
+  "product": {
+    "slug": "screenreader-task-audit",
+    "price_minor": 3900,
+    "currency": "USD"
+  },
+  "checkout": {
+    "provider": "Sociobot",
+    "host": "checkout.dodopayments.com",
+    "merchant_of_record": "Dodo Payments",
+    "card_fields_on_product_origin": false
+  },
+  "refunded_purchase": {
+    "license": "team-license-revoked-fixture",
+    "purchase_status": "refunded",
+    "refund_status": "succeeded",
+    "verification": {
+      "valid": false,
+      "reason": "revoked"
+    }
+  }
+}

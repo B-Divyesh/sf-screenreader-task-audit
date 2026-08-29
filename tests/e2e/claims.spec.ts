@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type Download, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { readFile } from 'node:fs/promises';
 
 async function createAudit(page: Page): Promise<void> {
   await page.goto('/audit');
@@ -121,34 +122,31 @@ test('@claim:html-export exports an accessible standalone report', async ({ page
 test('@claim:json-export exports five tasks as JSON', async ({ page }) => { await page.goto('/demo/report'); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click(); const stream = await (await download).createReadStream(); let json = ''; for await (const chunk of stream!) json += chunk.toString(); const exported = JSON.parse(json); expect(exported.schema).toBe('screenreader-task-audit/v1'); expect(exported.tasks).toHaveLength(5); });
 test('@claim:anonymous-export removes product and environment names from JSON', async ({ page }) => { await page.goto('/demo/report'); await page.getByLabel('Remove product and environment names').check(); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click(); const stream = await (await download).createReadStream(); let json = ''; for await (const chunk of stream!) json += chunk.toString(); expect(json).not.toContain('Northstar Metrics'); expect(JSON.parse(json)).toMatchObject({ product: 'Product withheld', environment: 'Withheld' }); });
 test('@claim:team-sharing restores a Sociobot license and creates a private report link that opens without an account', async ({ page, browser }: { page: Page; browser: Browser }) => {
+  test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), 'The recorded billing verifier is available only to the clean local claim run.');
   const license = 'team-license-fixture';
   await page.route(`https://api.sociobot.in/api/v1/products/screenreader-task-audit/verify?license=${license}`, route => route.fulfill({ contentType: 'application/json', body: '{"valid":true}' }));
-  await page.route('**/api/reports', async route => {
-    expect(route.request().method()).toBe('POST');
-    expect(route.request().headers().authorization).toBe(`Bearer ${license}`);
-    expect(JSON.parse(route.request().postData() || '{}')).toMatchObject({ schema: 'screenreader-task-audit/v1', tasks: expect.any(Array) });
-    await route.fulfill({ status: 201, contentType: 'application/json', body: '{"id":"0123456789abcdef0123456789abcdef","expires_at":"2026-09-28T09:00:00Z"}' });
+  const report = { schema: 'screenreader-task-audit/v1', audit: 'Rejected report', tasks: [] };
+  const missingLicense = await page.request.post('/api/reports', { data: report });
+  expect(missingLicense.status()).toBe(402);
+  const invalidLicense = await page.request.post('/api/reports', {
+    data: report,
+    headers: { authorization: 'Bearer invalid-license-fixture' }
   });
+  expect(invalidLicense.status()).toBe(402);
+
+  await createAudit(page);
+  await page.getByLabel('Task name').fill('Export invoices');
+  await page.getByLabel('Tester’s goal').fill('Download invoices');
   await page.goto(`/report?license=${license}`);
   await expect(page).toHaveURL('/report');
   expect(await page.evaluate(() => localStorage.getItem('sb_license:screenreader-task-audit'))).toBe(license);
   await expect(page.getByRole('button', { name: 'Create private link' })).toBeVisible();
   await page.getByRole('button', { name: 'Create private link' }).click();
   const sharedLink = page.getByRole('link', { name: 'Open the private report' });
-  await expect(sharedLink).toHaveAttribute('href', /\/share\/0123456789abcdef0123456789abcdef$/);
+  await expect(sharedLink).toHaveAttribute('href', /\/share\/[a-f0-9]{32}$/);
   const sharedUrl = await sharedLink.getAttribute('href');
   const readerContext = await browser.newContext();
   try {
-    await readerContext.route('**/api/reports/0123456789abcdef0123456789abcdef', route => route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        audit: 'September critical tasks',
-        product: 'Example dashboard',
-        environment: 'NVDA 2026 · Firefox 142',
-        tasks: [{ title: 'Export invoices', severity: 'critical', outcome: 'blocked', goal: 'Download invoices' }]
-      })
-    }));
     const reader = await readerContext.newPage();
     await reader.goto(sharedUrl!);
     expect(await reader.evaluate(() => localStorage.getItem('sb_license:screenreader-task-audit'))).toBeNull();
@@ -157,25 +155,54 @@ test('@claim:team-sharing restores a Sociobot license and creates a private repo
   } finally {
     await readerContext.close();
   }
-  await page.goto('/');
-  await expect(page.getByText('$39 once')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Buy team sharing (external)' })).toHaveAttribute('href', 'https://api.sociobot.in/api/v1/products/screenreader-task-audit/checkout');
   await page.goto('/privacy');
   await expect(page.getByText('Creating a private link sends the reviewed report to this service.')).toBeVisible();
   await page.goto('/terms');
   await expect(page.getByText('Team sharing is a one-time $39 purchase.')).toBeVisible();
+});
+
+test('@claim:payment-boundary hands checkout off without collecting card details on this origin', async ({ page }) => {
+  const contract = JSON.parse(await readFile(new URL('../fixtures/billing-contract.json', import.meta.url), 'utf8')) as {
+    product: { slug: string; price_minor: number; currency: string };
+    checkout: { provider: string; host: string; merchant_of_record: string; card_fields_on_product_origin: boolean };
+  };
+  expect(contract.checkout).toMatchObject({ provider: 'Sociobot', merchant_of_record: 'Dodo Payments', card_fields_on_product_origin: false });
+  const pageRequests: string[] = [];
+  page.on('request', request => pageRequests.push(request.url()));
+  await page.goto('/');
+  await expect(page.getByText('$39 once')).toBeVisible();
+  const checkoutLink = page.getByRole('link', { name: 'Buy team sharing (external)' });
+  await expect(checkoutLink).toHaveAttribute('href', 'https://api.sociobot.in/api/v1/products/screenreader-task-audit/checkout');
+  const paymentInputs = await page.locator('input').evaluateAll(inputs => inputs.map(input => ({
+    name: input.getAttribute('name') || '',
+    autocomplete: input.getAttribute('autocomplete') || '',
+    inputmode: input.getAttribute('inputmode') || ''
+  })));
+  for (const input of paymentInputs) expect(`${input.name} ${input.autocomplete} ${input.inputmode}`).not.toMatch(/card|cc-|cvc|cvv|expir/i);
+  const origin = new URL(page.url()).origin;
+  for (const source of await page.locator('script[src]').evaluateAll(scripts => scripts.map(script => (script as HTMLScriptElement).src))) {
+    expect(new URL(source).origin).toBe(origin);
+    const bundle = await page.request.get(source);
+    expect(bundle.ok()).toBe(true);
+    expect(await bundle.text()).not.toMatch(/js\.stripe\.com|braintreepayments|paypal\.com\/sdk|checkout\.dodopayments\.com|cardNumber/i);
+  }
+  await expect(page.locator('iframe')).toHaveCount(0);
+  expect(pageRequests.every(url => new URL(url).origin === origin)).toBe(true);
+
   const catalog = await page.request.get('https://api.sociobot.in/api/v1/products');
   expect(catalog.ok()).toBe(true);
   const products = await catalog.json() as { data: { slug: string; price_minor: number; currency: string; checkout_url: string }[] };
   expect(products.data).toContainEqual(expect.objectContaining({
-    slug: 'screenreader-task-audit',
-    price_minor: 3900,
-    currency: 'USD',
+    slug: contract.product.slug,
+    price_minor: contract.product.price_minor,
+    currency: contract.product.currency,
     checkout_url: 'https://api.sociobot.in/api/v1/products/screenreader-task-audit/checkout'
   }));
   const checkout = await page.request.get('https://api.sociobot.in/api/v1/products/screenreader-task-audit/checkout', { maxRedirects: 0 });
   expect(checkout.status()).toBe(303);
-  expect(checkout.headers().location).toMatch(/^https:\/\/checkout\.dodopayments\.com\/session\/cks_[A-Za-z0-9]+$/);
+  const checkoutDestination = new URL(checkout.headers().location);
+  expect(checkoutDestination.host).toBe(contract.checkout.host);
+  expect(checkoutDestination.pathname).toMatch(/^\/session\/cks_[A-Za-z0-9]+$/);
 });
 
 test('@claim:license-restore-feedback announces invalid and valid landing license results without retaining an invalid token', async ({ page }) => {
@@ -331,12 +358,17 @@ test('@claim:free-audit-features an unlicensed local audit can export HTML and J
   expect(JSON.parse(await readDownload(await jsonDownload))).toMatchObject({ schema: 'screenreader-task-audit/v1' });
 });
 test('@claim:license-revocation a revoked team-sharing license removes private-link access', async ({ page }) => {
-  const license = 'team-license-revoked-fixture';
+  const contract = JSON.parse(await readFile(new URL('../fixtures/billing-contract.json', import.meta.url), 'utf8')) as {
+    refunded_purchase: { license: string; purchase_status: string; refund_status: string; verification: { valid: boolean; reason: string } };
+  };
+  expect(contract.refunded_purchase).toMatchObject({ purchase_status: 'refunded', refund_status: 'succeeded' });
+  expect(contract.refunded_purchase.verification).toEqual({ valid: false, reason: 'revoked' });
+  const license = contract.refunded_purchase.license;
   await page.addInitScript(token => {
     localStorage.setItem('sb_license:screenreader-task-audit', token);
     localStorage.setItem('sb_license:screenreader-task-audit:verified', JSON.stringify({ valid: true, checked: 0, token }));
   }, license);
-  await page.route(`https://api.sociobot.in/api/v1/products/screenreader-task-audit/verify?license=${license}`, route => route.fulfill({ contentType: 'application/json', body: '{"valid":false,"reason":"revoked"}' }));
+  await page.route(`https://api.sociobot.in/api/v1/products/screenreader-task-audit/verify?license=${license}`, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(contract.refunded_purchase.verification) }));
   await page.goto('/report');
   await expect(page.getByText('This team-sharing license is not active. Check the token or choose Buy team sharing. Free exports still work.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create private link' })).toHaveCount(0);
@@ -369,10 +401,33 @@ test('routes have unique metadata, real 404, accessible structure, and 44px targ
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${canonicalOrigin}${canonical}`);
     await expect(page.locator('main')).toHaveCount(1);
     await expect(page.locator('h1')).toHaveCount(1);
+    await expect(page.getByText('Record task evidence and review a prioritized report.')).toBeVisible();
+    await expect(page.getByText(/Version 1\.1\.1 · Build (dev|[a-f0-9]{7,40})/)).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Built by Param Factory (external site)' })).toHaveText('Built by Param Factory (external)');
     await expect(page.getByRole('link', { name: 'Privacy', exact: true }).first()).toHaveAttribute('href', '/privacy');
     await expect(page.getByRole('link', { name: 'Terms', exact: true })).toHaveAttribute('href', '/terms');
   }
   await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/?demo=1'); expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390); for (const box of await page.locator('a,button').evaluateAll(elements => elements.map(element => { const box = element.getBoundingClientRect(); return { width: box.width, height: box.height }; }))) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+});
+test('the 390px first screen states the job, audience, action, result, and three facts', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: 'Record screen-reader task evidence' })).toBeVisible();
+  await expect(page.getByText('For blind founders and small teams fixing a critical dashboard task.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Try it with sample data' })).toBeVisible();
+  await expect(page.getByText('See five filled tasks and a prioritized report.')).toBeVisible();
+  await expect(page.locator('.plain-facts li')).toHaveText([
+    'Free audits stay in this browser.',
+    'The demo works offline after its first visit.',
+    'Record up to five critical tasks.'
+  ]);
+  for (const box of await page.locator('.hero-copy h1, .hero-copy .lede, .hero-actions, .plain-facts li').evaluateAll(elements => elements.map(element => {
+    const bounds = element.getBoundingClientRect();
+    return { top: bounds.top, bottom: bounds.bottom };
+  }))) {
+    expect(box.top).toBeGreaterThanOrEqual(0);
+    expect(box.bottom).toBeLessThanOrEqual(844);
+  }
 });
 test('static 404 keeps links and focus indicators accessible in dark mode', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
