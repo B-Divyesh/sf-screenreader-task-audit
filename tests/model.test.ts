@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { demoAudit, priority, reportData } from '../src/model';
+import { auditFromImport, demoAudit, priority, reportData } from '../src/model';
 import { escapeHtml, reportHtml } from '../src/export';
 
 describe('audit report logic', () => {
@@ -13,6 +13,38 @@ describe('audit report logic', () => {
     const report = reportData(demoAudit(), true);
     expect(report.product).toBe('Product withheld');
     expect(report.environment).toBe('Withheld');
+    expect(report.assistiveTech).toBe('Withheld');
+    expect(report.browser).toBe('Withheld');
+  });
+  it('restores setup context and creation time from JSON reports', () => {
+    const source = demoAudit();
+    const restored = auditFromImport(reportData(source, false));
+    expect(restored).toMatchObject({
+      name: source.name,
+      product: source.product,
+      assistiveTech: source.assistiveTech,
+      browser: source.browser,
+      consent: true,
+      created: source.created
+    });
+    expect(restored.tasks[0]).toMatchObject({
+      title: source.tasks[0].title,
+      goal: source.tasks[0].goal,
+      start: source.tasks[0].start,
+      outcome: source.tasks[0].outcome,
+      severity: source.tasks[0].severity,
+      expected: source.tasks[0].expected,
+      announced: source.tasks[0].announced,
+      focus: source.tasks[0].focus,
+      blocker: source.tasks[0].blocker,
+      notes: source.tasks[0].notes
+    });
+    expect(restored.tasks[0].trace[0]).toMatchObject({
+      time: source.tasks[0].trace[0].time,
+      kind: source.tasks[0].trace[0].kind,
+      target: source.tasks[0].trace[0].target,
+      observed: source.tasks[0].trace[0].observed
+    });
   });
   it('escapes user text in HTML reports', () => {
     const audit = demoAudit();

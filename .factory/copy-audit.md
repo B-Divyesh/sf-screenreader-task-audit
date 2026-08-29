@@ -24,7 +24,7 @@ The headline has four words. The audience sentence has 11 words. The first actio
 | It does not watch a tester or record page text. | 10 | Tested privacy boundary |
 | It does not collect passwords or analytics data from the product you test. | 13 | Tested privacy boundary |
 | It does not certify accessibility or provide legal advice. | 9 | Tested scope |
-| Export JSON, then import it later in this browser. | 9 | Tested restore path |
+| Export JSON, then restore the same editable audit. | 8 | Tested restore path |
 
 ## Terminology
 
@@ -38,4 +38,4 @@ The headline has four words. The audience sentence has 11 words. The first actio
 | Sequence details | event trace |
 | Assistive software | screen reader |
 
-Catalog description: “Record screen-reader task evidence for critical dashboard work.” It starts with a verb and is 63 characters.
+Catalog description: “Record screen-reader task evidence and rank blockers for repair.” It starts with a verb and is 64 characters.

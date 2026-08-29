@@ -123,6 +123,8 @@ export function reportData(audit: Audit, anonymous: boolean) {
     audit: anonymous ? 'Anonymous screen-reader task audit' : audit.name || 'Untitled audit',
     product: anonymous ? 'Product withheld' : audit.product || 'Product not named',
     environment: anonymous ? 'Withheld' : [audit.assistiveTech, audit.browser].filter(Boolean).join(' · '),
+    assistiveTech: anonymous ? 'Withheld' : audit.assistiveTech,
+    browser: anonymous ? 'Withheld' : audit.browser,
     created: audit.created,
     summary: {
       total: audit.tasks.length,
@@ -143,6 +145,29 @@ const severities: Severity[] = ['low', 'medium', 'high', 'critical'];
 
 function text(value: unknown, limit: number): string {
   return typeof value === 'string' ? value.slice(0, limit) : '';
+}
+
+function importedEnvironment(report: Record<string, unknown>): { assistiveTech: string; browser: string } {
+  const assistiveTech = text(report.assistiveTech, 80);
+  const browser = text(report.browser, 80);
+  if (assistiveTech || browser) return { assistiveTech, browser };
+
+  // Exports made before separate setup fields were added stored both values in
+  // one display string. Keep those local backups useful without guessing when
+  // the separator is absent or the export was anonymized.
+  const environment = text(report.environment, 163);
+  if (!environment || environment === 'Withheld') return { assistiveTech: '', browser: '' };
+  const separator = environment.indexOf(' · ');
+  if (separator === -1) return { assistiveTech: environment.slice(0, 80), browser: '' };
+  return {
+    assistiveTech: environment.slice(0, separator).slice(0, 80),
+    browser: environment.slice(separator + 3).slice(0, 80)
+  };
+}
+
+function importedCreated(value: unknown): string {
+  const created = text(value, 40);
+  return created && !Number.isNaN(Date.parse(created)) ? created : new Date().toISOString();
 }
 
 /** Turns this product's JSON export back into an editable local audit. */
@@ -166,8 +191,10 @@ export function auditFromImport(value: unknown): Audit {
     if (!outcomes.includes(outcome) || !severities.includes(severity)) throw new Error(`Task ${index + 1} has an unknown result or impact.`);
     return { id: crypto.randomUUID(), title: text(task.title, 100), goal: text(task.goal, 180), start: text(task.start, 120), outcome, severity, expected: text(task.expected, 1000), announced: text(task.announced, 1000), focus: text(task.focus, 1000), blocker: text(task.blocker, 1000), notes: text(task.notes, 1000), trace };
   });
+  const environment = importedEnvironment(report);
   return {
-    id: crypto.randomUUID(), name: text(report.audit, 80) || 'Imported audit', product: text(report.product, 80), assistiveTech: '', browser: '', consent: true,
-    created: new Date().toISOString(), updated: new Date().toISOString(), tasks
+    id: crypto.randomUUID(), name: text(report.audit, 80) || 'Imported audit', product: text(report.product, 80),
+    assistiveTech: environment.assistiveTech, browser: environment.browser, consent: true,
+    created: importedCreated(report.created), updated: new Date().toISOString(), tasks
   };
 }

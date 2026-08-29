@@ -1,1 +1,1 @@
-Record screen-reader task evidence for critical dashboard work.
+Record screen-reader task evidence and rank blockers for repair.

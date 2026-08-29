@@ -19,7 +19,7 @@ The service worker makes the demo available offline after its first visit.
 - Event traces record focus, actions, and announcements when a sequence matters.
 - Reports sort tasks by result and impact.
 - Accessible HTML and JSON exports are free.
-- JSON exports can be imported after you confirm the restore.
+- JSON exports restore the setup, tasks, and event traces after you confirm.
 
 Free audits stay in browser storage under `sra:audit:v1`. The local audit does not send task content to a server. The site has no analytics, ads, third-party fonts, or runtime scripts.
 

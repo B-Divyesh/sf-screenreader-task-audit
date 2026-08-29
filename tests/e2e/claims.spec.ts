@@ -1,4 +1,4 @@
-import { test, expect, type Download, type Page } from '@playwright/test';
+import { test, expect, type Browser, type Download, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 async function createAudit(page: Page): Promise<void> {
@@ -106,12 +106,98 @@ test('@claim:html-export exports an accessible standalone report', async ({ page
 test('@claim:json-export exports five tasks as JSON', async ({ page }) => { await page.goto('/demo/report'); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click(); const stream = await (await download).createReadStream(); let json = ''; for await (const chunk of stream!) json += chunk.toString(); const exported = JSON.parse(json); expect(exported.schema).toBe('screenreader-task-audit/v1'); expect(exported.tasks).toHaveLength(5); });
 test('@claim:anonymous-export removes product and environment names from JSON', async ({ page }) => { await page.goto('/demo/report'); await page.getByLabel('Remove product and environment names').check(); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click(); const stream = await (await download).createReadStream(); let json = ''; for await (const chunk of stream!) json += chunk.toString(); expect(json).not.toContain('Northstar Metrics'); expect(JSON.parse(json)).toMatchObject({ product: 'Product withheld', environment: 'Withheld' }); });
 
-test('@claim:import-json restores a JSON export only after confirmation', async ({ page }) => {
-  await page.goto('/demo/report'); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click(); const stream = await (await download).createReadStream(); let contents = ''; for await (const chunk of stream!) contents += chunk.toString();
-  await page.goto('/audit'); await page.getByLabel('Import audit JSON').setInputFiles({ name: 'audit.json', mimeType: 'application/json', buffer: Buffer.from(contents) });
-  await expect(page.getByRole('heading', { name: 'Ready to restore this audit' })).toBeVisible(); expect(await page.evaluate(() => localStorage.getItem('sra:audit:v1'))).not.toContain('August analytics check');
-  await page.getByRole('button', { name: 'Restore imported audit' }).click(); await expect(page.getByRole('heading', { name: 'August analytics check' })).toBeVisible();
-  await page.getByRole('button', { name: 'Edit audit details' }).click(); await page.getByLabel('Import audit JSON').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"tasks":[]}') }); await expect(page.locator('#import-error')).toContainText('not a Screenreader Task Audit');
+test('@claim:import-json restores every editable audit field only after confirmation', async ({ page, browser }: { page: Page; browser: Browser }) => {
+  await page.goto('/audit');
+  await page.getByLabel('Audit name').fill('October checkout audit');
+  await page.getByLabel('Product or dashboard').fill('Northstar Billing');
+  await page.getByLabel('Screen reader and version').fill('NVDA 2026.1');
+  await page.getByLabel('Browser and version').fill('Firefox 142');
+  await page.getByLabel(/The tester agreed/).check();
+  await page.getByRole('button', { name: 'Create audit' }).click();
+  await page.getByLabel('Task name').fill('Download an invoice');
+  await page.getByLabel('Tester’s goal').fill('Save invoice 1842 as PDF');
+  await page.getByLabel('Starting place').fill('Invoice detail');
+  await page.getByLabel('Partial').check();
+  await page.getByRole('radio', { name: 'High' }).check();
+  await page.getByLabel('Expected steps').fill('Open Actions, then choose Download PDF.');
+  await page.getByLabel('Announcements heard').fill('Actions menu announced as expanded.');
+  await page.getByLabel('Focus movement').fill('Focus moved to the second menu item.');
+  await page.getByLabel('Blocker').fill('Download completion was not announced.');
+  await page.getByLabel('Other notes').fill('The file still downloaded.');
+  await page.getByRole('button', { name: 'Add trace event' }).click();
+  await page.getByLabel('Time').fill('10:42');
+  await page.getByLabel('Event type').selectOption('announcement');
+  await page.getByLabel('Control or area').fill('Download notice');
+  await page.getByLabel('What happened').fill('No completion message was heard.');
+  await page.getByRole('button', { name: 'Record event' }).click();
+  const original = await page.evaluate(() => JSON.parse(localStorage.getItem('sra:audit:v1')!));
+  await page.getByRole('link', { name: 'Review report' }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export JSON' }).click();
+  const contents = await readDownload(await download);
+  const exported = JSON.parse(contents);
+  expect(exported).toMatchObject({
+    audit: 'October checkout audit', product: 'Northstar Billing',
+    assistiveTech: 'NVDA 2026.1', browser: 'Firefox 142', created: original.created
+  });
+
+  const restoreContext = await browser.newContext();
+  try {
+    const restorePage = await restoreContext.newPage();
+    const origin = new URL(page.url()).origin;
+    await restorePage.goto(`${origin}/audit`);
+    await restorePage.getByLabel('Import audit JSON').setInputFiles({ name: 'audit.json', mimeType: 'application/json', buffer: Buffer.from(contents) });
+    await expect(restorePage.getByRole('heading', { name: 'Ready to restore this audit' })).toBeVisible();
+    await expect(restorePage.locator('.import-preview')).toContainText('Northstar Billing');
+    await expect(restorePage.locator('.import-preview')).toContainText('NVDA 2026.1');
+    await expect(restorePage.locator('.import-preview')).toContainText('Firefox 142');
+    expect(await restorePage.evaluate(() => localStorage.getItem('sra:audit:v1'))).not.toContain('October checkout audit');
+    await restorePage.getByRole('button', { name: 'Restore imported audit' }).click();
+    await expect(restorePage.getByRole('heading', { name: 'October checkout audit' })).toBeVisible();
+    await restorePage.reload();
+
+    const restored = await restorePage.evaluate(() => JSON.parse(localStorage.getItem('sra:audit:v1')!));
+    expect(restored).toMatchObject({
+      name: original.name,
+      product: original.product,
+      assistiveTech: original.assistiveTech,
+      browser: original.browser,
+      consent: original.consent,
+      created: original.created,
+      tasks: [{
+        title: original.tasks[0].title,
+        goal: original.tasks[0].goal,
+        start: original.tasks[0].start,
+        outcome: original.tasks[0].outcome,
+        severity: original.tasks[0].severity,
+        expected: original.tasks[0].expected,
+        announced: original.tasks[0].announced,
+        focus: original.tasks[0].focus,
+        blocker: original.tasks[0].blocker,
+        notes: original.tasks[0].notes,
+        trace: [{
+          time: original.tasks[0].trace[0].time,
+          kind: original.tasks[0].trace[0].kind,
+          target: original.tasks[0].trace[0].target,
+          observed: original.tasks[0].trace[0].observed
+        }]
+      }]
+    });
+    await restorePage.getByRole('button', { name: 'Edit audit details' }).click();
+    await expect(restorePage.getByLabel('Audit name')).toHaveValue('October checkout audit');
+    await expect(restorePage.getByLabel('Product or dashboard')).toHaveValue('Northstar Billing');
+    await expect(restorePage.getByLabel('Screen reader and version')).toHaveValue('NVDA 2026.1');
+    await expect(restorePage.getByLabel('Browser and version')).toHaveValue('Firefox 142');
+    await restorePage.goto(`${origin}/report`);
+    await expect(restorePage.getByText('Northstar Billing · NVDA 2026.1 · Firefox 142')).toBeVisible();
+    await expect(restorePage.getByText('Download completion was not announced.')).toBeVisible();
+
+    await restorePage.goto(`${origin}/audit`);
+    await restorePage.getByLabel('Import audit JSON').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"tasks":[]}') });
+    await expect(restorePage.locator('#import-error')).toContainText('not a Screenreader Task Audit');
+  } finally {
+    await restoreContext.close();
+  }
 });
 
 test('@claim:privacy-boundaries keep local audit data local and avoid capture or analytics', async ({ page, baseURL }) => {
