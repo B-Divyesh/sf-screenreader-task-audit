@@ -56,6 +56,7 @@ required_volume = {
     "name": volume.get("name"),
     "storageName": volume.get("storageName"),
     "storageType": volume.get("storageType"),
+    "mountOptions": volume.get("mountOptions"),
 }
 if not all(required_volume.values()) or not volume.get("mountPath"):
     raise SystemExit("deployment contract has no complete durable volume")

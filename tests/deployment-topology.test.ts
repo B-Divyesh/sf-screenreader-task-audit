@@ -18,7 +18,12 @@ function appFixture(maxReplicas: number, mounted = true): Record<string, unknown
     properties: {
       template: {
         scale: { minReplicas: 1, maxReplicas },
-        volumes: mounted ? [{ name: 'audit-data', storageName: 'screenreader-task-audit-data', storageType: 'AzureFile' }] : [],
+        volumes: mounted ? [{
+          name: 'audit-data',
+          storageName: 'screenreader-task-audit-data',
+          storageType: 'AzureFile',
+          mountOptions: 'uid=10001,gid=10001,file_mode=0770,dir_mode=0770'
+        }] : [],
         containers: [{
           name: 'app', image: candidateImage,
           volumeMounts: mounted ? [{ volumeName: 'audit-data', mountPath: '/app/data' }] : []

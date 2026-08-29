@@ -771,6 +771,8 @@ mod tests {
         let contents = std::fs::read_to_string(dockerfile).unwrap();
         assert!(contents.contains("DATA_DIR=/tmp/screenreader-task-audit"));
         assert!(contents.contains("DURABLE_DATA_DIR=/app/data"));
+        assert!(contents.contains("addgroup -S -g 10001 app"));
+        assert!(contents.contains("adduser -S -D -H -u 10001 -G app app"));
     }
 
     #[test]
@@ -796,6 +798,12 @@ mod tests {
                 .pointer("/persistentVolume/storageType")
                 .and_then(Value::as_str),
             Some("AzureFile")
+        );
+        assert_eq!(
+            config
+                .pointer("/persistentVolume/mountOptions")
+                .and_then(Value::as_str),
+            Some("uid=10001,gid=10001,file_mode=0770,dir_mode=0770")
         );
         assert_eq!(
             config

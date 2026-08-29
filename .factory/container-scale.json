@@ -5,6 +5,7 @@
     "name": "audit-data",
     "storageName": "screenreader-task-audit-data",
     "storageType": "AzureFile",
+    "mountOptions": "uid=10001,gid=10001,file_mode=0770,dir_mode=0770",
     "mountPath": "/app/data"
   },
   "reason": "Reports and rate-limit counters are stored in SQLite. One ready replica and the mounted durable volume keep reports and the documented 40-request allowance consistent."

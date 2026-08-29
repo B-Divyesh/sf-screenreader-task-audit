@@ -18,7 +18,7 @@ ARG BUILD_SHA=dev
 RUN cargo build --release
 
 FROM alpine:3.22
-RUN addgroup -S app && adduser -S -G app app && mkdir -p /app/data && chown -R app:app /app
+RUN addgroup -S -g 10001 app && adduser -S -D -H -u 10001 -G app app && mkdir -p /app/data && chown -R app:app /app
 WORKDIR /app
 COPY --from=backend /app/target/release/screenreader-task-audit /app/server
 COPY --from=frontend /app/dist /app/dist
