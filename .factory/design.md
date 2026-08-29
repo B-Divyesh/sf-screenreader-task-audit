@@ -15,7 +15,7 @@ Light is the primary treatment because it resembles an audit worksheet. Dark mod
 | ink | `#18243A` | `#F8EFD9` | primary text |
 | muted ink | `#526071` | `#B9C2CC` | supporting text |
 | cobalt | `#1559D6` | `#75A7FF` | links and focus |
-| vermilion | `#B52F22` | `#FF8A77` | blockers and urgent stamps |
+| vermilion | `#A42B20` | `#FF8A77` | blockers and urgent stamps |
 | moss | `#27643A` | `#76CB8E` | completed tasks |
 | mustard | `#8A5B00` | `#F2C75C` | partial tasks and warnings |
 | rule | `#A9A08E` | `#606A78` | borders and registration marks |

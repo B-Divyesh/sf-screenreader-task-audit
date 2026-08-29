@@ -23,7 +23,7 @@ The service worker makes the demo available offline after its first visit.
 
 ## Team sharing
 
-Team sharing costs $39 once. It creates a private report link for a teammate who does not need an account. Checkout, refunds, and license verification use Sociobot and Dodo. The product never handles card details.
+Team sharing costs $39 once. It creates a private report link for a teammate who does not need an account. Checkout, refunds, and license verification use Sociobot and Dodo. A refund revokes the team-sharing license. The product never handles card details.
 
 Choose **Buy team sharing** on the landing page. After checkout, the return token is stored only in this browser and removed from the URL. **Have a license? Paste it** restores a purchase on another device. The report sends its content to the server only after a verified license holder chooses **Create private link**.
 

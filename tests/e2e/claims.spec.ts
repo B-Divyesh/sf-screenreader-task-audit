@@ -120,7 +120,7 @@ test('@claim:html-export exports an accessible standalone report', async ({ page
 });
 test('@claim:json-export exports five tasks as JSON', async ({ page }) => { await page.goto('/demo/report'); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click(); const stream = await (await download).createReadStream(); let json = ''; for await (const chunk of stream!) json += chunk.toString(); const exported = JSON.parse(json); expect(exported.schema).toBe('screenreader-task-audit/v1'); expect(exported.tasks).toHaveLength(5); });
 test('@claim:anonymous-export removes product and environment names from JSON', async ({ page }) => { await page.goto('/demo/report'); await page.getByLabel('Remove product and environment names').check(); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click(); const stream = await (await download).createReadStream(); let json = ''; for await (const chunk of stream!) json += chunk.toString(); expect(json).not.toContain('Northstar Metrics'); expect(JSON.parse(json)).toMatchObject({ product: 'Product withheld', environment: 'Withheld' }); });
-test('@claim:team-sharing restores a Sociobot license and creates a private report link', async ({ page }) => {
+test('@claim:team-sharing restores a Sociobot license and creates a private report link that opens without an account', async ({ page, browser }: { page: Page; browser: Browser }) => {
   const license = 'team-license-fixture';
   await page.route(`https://api.sociobot.in/api/v1/products/screenreader-task-audit/verify?license=${license}`, route => route.fulfill({ contentType: 'application/json', body: '{"valid":true}' }));
   await page.route('**/api/reports', async route => {
@@ -134,7 +134,29 @@ test('@claim:team-sharing restores a Sociobot license and creates a private repo
   expect(await page.evaluate(() => localStorage.getItem('sb_license:screenreader-task-audit'))).toBe(license);
   await expect(page.getByRole('button', { name: 'Create private link' })).toBeVisible();
   await page.getByRole('button', { name: 'Create private link' }).click();
-  await expect(page.getByRole('link', { name: 'Open the private report' })).toHaveAttribute('href', /\/share\/0123456789abcdef0123456789abcdef$/);
+  const sharedLink = page.getByRole('link', { name: 'Open the private report' });
+  await expect(sharedLink).toHaveAttribute('href', /\/share\/0123456789abcdef0123456789abcdef$/);
+  const sharedUrl = await sharedLink.getAttribute('href');
+  const readerContext = await browser.newContext();
+  try {
+    await readerContext.route('**/api/reports/0123456789abcdef0123456789abcdef', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        audit: 'September critical tasks',
+        product: 'Example dashboard',
+        environment: 'NVDA 2026 · Firefox 142',
+        tasks: [{ title: 'Export invoices', severity: 'critical', outcome: 'blocked', goal: 'Download invoices' }]
+      })
+    }));
+    const reader = await readerContext.newPage();
+    await reader.goto(sharedUrl!);
+    expect(await reader.evaluate(() => localStorage.getItem('sb_license:screenreader-task-audit'))).toBeNull();
+    await expect(reader.getByRole('heading', { name: 'September critical tasks' })).toBeVisible();
+    await expect(reader.getByRole('heading', { name: 'Export invoices' })).toBeVisible();
+  } finally {
+    await readerContext.close();
+  }
   await page.goto('/');
   await expect(page.getByText('$39 once')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Buy team sharing (external)' })).toHaveAttribute('href', 'https://api.sociobot.in/api/v1/products/screenreader-task-audit/checkout');
@@ -269,15 +291,58 @@ test('@claim:import-json restores every editable audit field only after confirma
   }
 });
 
-test('@claim:privacy-boundaries keep local audit data local and avoid capture or analytics', async ({ page, baseURL }) => {
+test('@claim:privacy-boundaries keep recorded local audit data local and avoid capture or analytics', async ({ page, baseURL }) => {
   const external: string[] = []; const api: string[] = []; const origin = new URL(baseURL!).origin;
   await page.addInitScript(() => { (window as unknown as { captureCalls: string[] }).captureCalls = []; const media = navigator.mediaDevices as MediaDevices & Record<string, unknown>; for (const name of ['getDisplayMedia', 'getUserMedia']) { const original = media[name] as ((...args: unknown[]) => unknown) | undefined; if (original) Object.defineProperty(media, name, { configurable: true, value: (...args: unknown[]) => { (window as unknown as { captureCalls: string[] }).captureCalls.push(name); return original.apply(media, args); } }); } });
   page.on('request', request => { const url = new URL(request.url()); if (url.origin !== origin) external.push(url.href); if (url.pathname.startsWith('/api/')) api.push(url.href); });
+  await createAudit(page);
+  await page.getByLabel('Task name').fill('Private task marker 6b0a');
+  await page.getByLabel('Other notes').fill('Private notes marker 9e4d');
+  await page.getByRole('link', { name: 'Review report' }).click();
   for (const route of ['/', '/?demo=1', '/audit', '/report', '/privacy', '/terms']) await page.goto(route);
   expect(await page.evaluate(() => (window as unknown as { captureCalls: string[] }).captureCalls)).toEqual([]);
   expect(external).toEqual([]); expect(api).toEqual([]);
 });
 test('@claim:offline-reload demo reloads offline after its first visit', async ({ page, context }) => { await page.goto('/?demo=1'); await page.evaluate(async () => { await navigator.serviceWorker.ready; }); await page.reload(); await context.setOffline(true); await page.reload(); await expect(page.getByText('You are offline. Saved audits and the demo still work.')).toBeVisible(); await expect(page.getByRole('heading', { name: 'August analytics check' })).toBeVisible(); });
+test('@claim:saved-audit-offline a saved local audit reloads offline after its first visit', async ({ page, context }) => {
+  await createAudit(page);
+  await page.getByLabel('Task name').fill('Saved offline audit');
+  await page.getByLabel('Other notes').fill('This stays in browser storage.');
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await page.reload();
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.getByText('You are offline. Saved audits and the demo still work.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'September critical tasks' })).toBeVisible();
+  await expect(page.getByLabel('Task name')).toHaveValue('Saved offline audit');
+  await expect(page.getByLabel('Other notes')).toHaveValue('This stays in browser storage.');
+});
+test('@claim:free-audit-features an unlicensed local audit can export HTML and JSON without an account', async ({ page }) => {
+  await createAudit(page);
+  await page.getByLabel('Task name').fill('Free export task');
+  await page.getByRole('link', { name: 'Review report' }).click();
+  expect(await page.evaluate(() => localStorage.getItem('sb_license:screenreader-task-audit'))).toBeNull();
+  await expect(page.getByRole('button', { name: 'Create private link' })).toHaveCount(0);
+  const htmlDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export accessible HTML' }).click();
+  expect(await readDownload(await htmlDownload)).toContain('<main>');
+  const jsonDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export JSON' }).click();
+  expect(JSON.parse(await readDownload(await jsonDownload))).toMatchObject({ schema: 'screenreader-task-audit/v1' });
+});
+test('@claim:license-revocation a revoked team-sharing license removes private-link access', async ({ page }) => {
+  const license = 'team-license-revoked-fixture';
+  await page.addInitScript(token => {
+    localStorage.setItem('sb_license:screenreader-task-audit', token);
+    localStorage.setItem('sb_license:screenreader-task-audit:verified', JSON.stringify({ valid: true, checked: 0, token }));
+  }, license);
+  await page.route(`https://api.sociobot.in/api/v1/products/screenreader-task-audit/verify?license=${license}`, route => route.fulfill({ contentType: 'application/json', body: '{"valid":false,"reason":"revoked"}' }));
+  await page.goto('/report');
+  await expect(page.getByText('This team-sharing license is not active. Check the token or choose Buy team sharing. Free exports still work.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create private link' })).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('sb_license:screenreader-task-audit'))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('sb_license:screenreader-task-audit:verified'))).toBeNull();
+});
 test('@claim:manual-evidence-not-certification records observations without scans or scores', async ({ page }) => { await page.goto('/'); await expect(page.getByText('It records manual observations. It does not scan a product.')).toBeVisible(); await expect(page.getByText('It does not certify accessibility or provide legal advice.')).toBeVisible(); await expect(page.getByText(/score/i)).toHaveCount(0); });
 
 test('routes have unique metadata, real 404, accessible structure, and 44px targets', async ({ page }) => {
@@ -343,6 +408,7 @@ test('shared report metadata distinguishes loaded and missing reports', async ({
   await expect(page.getByRole('heading', { name: 'This page was not found' })).toBeVisible();
 });
 test('all public routes have no serious accessibility findings or console errors', async ({ page }) => { const errors: string[] = []; page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); }); for (const path of ['/', '/?demo=1', '/demo/report', '/privacy', '/terms']) { await page.goto(path); const result = await new AxeBuilder({ page }).analyze(); expect(result.violations.filter(issue => ['serious', 'critical'].includes(issue.impact || ''))).toEqual([]); } expect(errors).toEqual([]); await page.goto('/missing'); const result = await new AxeBuilder({ page }).analyze(); expect(result.violations.filter(issue => ['serious', 'critical'].includes(issue.impact || ''))).toEqual([]); });
+test('blocked task controls meet AA contrast at 390px', async ({ page }) => { await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/demo'); const result = await new AxeBuilder({ page }).include('fieldset').analyze(); expect(result.violations.filter(issue => issue.id === 'color-contrast' && ['serious', 'critical'].includes(issue.impact || ''))).toEqual([]); });
 test('keyboard navigation moves focus to each new heading', async ({ page }) => { await page.goto('/'); await page.keyboard.press('Tab'); await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused(); await page.keyboard.press('Enter'); await expect(page.locator('main')).toBeFocused(); await page.getByRole('link', { name: 'Demo', exact: true }).press('Enter'); await expect(page.locator('h1')).toBeFocused(); });
 test('keyboard task changes and trace actions retain focus and announce the new state', async ({ page }) => {
   await page.goto('/demo');
