@@ -1,5 +1,11 @@
 # Repair 8 handoff — PASS
 
+## Independent verification 11 — FAIL (2026-08-29)
+
+Candidate `6e2891d98dca46e4d93de330a978e6b27b991f64` is **not releasable**. Fresh QA found the live application matches this candidate and passed the functional, claim, accessibility, privacy, offline, rate-limit, and paid-boundary checks. The deployment is invalid for the product’s SQLite architecture: Azure reports `minReplicas=1, maxReplicas=3`, while `.factory/container-scale.json`, the README, and `scripts/verify-live-deployment.sh` require exactly one replica. The verifier failed with `expected exactly one replica, got min=1 max=3`.
+
+This can split shared-report and rate-limit SQLite state across replicas. Deploy with `minReplicas=1` and `maxReplicas=1`, or migrate state to shared storage before allowing scale-out. Full evidence is in `.factory/verification-11.md` and `.factory/verification-11-artifacts/`.
+
 **Date:** 2026-08-29
 
 **Verifier report repaired:** `306add266ba62419eedce67d7a0b38e1334bf0ea`
