@@ -1,44 +1,98 @@
-# Screenreader Task Audit — verification 4 handoff
+# Screenreader Task Audit — repair 3 handoff
 
-## Status: FAIL — do not release
+## Status: deployed and verified
 
-Candidate `53f9247c104641aabef42d4a0c601d5f5ff53cb9` was independently tested on 29 August 2026 at <https://screenreader-task-audit.sociobot.in>.
+Repair commit: `78146aa1af417cad16124689cee29bf31c1173b4`.
 
-The live deployment is the candidate: `/health` returned the full SHA, and live HTML, JS, and CSS were byte-identical to a fresh candidate-stamped build.
+Live URL: <https://screenreader-task-audit.sociobot.in>
 
-## Release blockers
+`/health` returns the same full build SHA. The deployment is revision
+`sf-screenreader-task-audit--0000012`, with `minReplicas: 1` and
+`maxReplicas: 1`.
 
-1. The live API did not rate-limit one client. A 100-request concurrent burst returned 100 × 404 and 0 × 429; separate 70-request sequential runs also returned no 429. The documented allowance is 40. The same release binary locally returned 40 × 404 then 30 × 429 with `Retry-After: 1`.
-2. A fresh direct `/demo` load reads and writes `sra:audit:v1` before using `demo:sra:audit:v1`. With an existing real audit it still reads the real key. This violates the required demo isolation boundary and the “nothing is saved” banner.
-3. The green `@claim:demo-sandbox` test does not catch this because it creates a real audit before entering demo and does not instrument storage access.
+## Repairs
 
-See `.factory/verification-4.md` for exact commands, evidence, all claim results, and lower-severity findings.
+1. **Demo storage isolation.** The app previously called `loadAudit(false)`
+   during module startup, before it knew the current route. A direct `/demo`
+   load therefore read and created `sra:audit:v1`. Startup now begins with an
+   in-memory blank audit and loads only the namespace for the resolved route.
+   `@claim:demo-sandbox` now instruments `Storage.getItem`, `setItem`, and
+   `removeItem` before a fresh direct `/demo` load. It proves that no operation
+   targets `sra:audit:v1`, then exercises edit, reset, leave, and re-entry.
 
-## Checks that passed
+2. **Live rate-limit topology and boundary.** The Rust limiter and its
+   SQLite transaction already enforce the 40-request allowance within one
+   state store. The deployment configuration allowed up to three Container App
+   replicas, which could give each replica separate SQLite limiter state. The
+   live app is now pinned to one replica (`minReplicas: 1`, `maxReplicas: 1`),
+   making its state authoritative for the deployed topology. The Rust
+   regression test now asserts requests 1–40 pass and request 41 is exactly
+   `429` with `Retry-After: 1`. The checked-in
+   `scripts/verify-live-rate-limit.sh` repeats that public proof after deploy.
 
-- All 14 commands in `.factory/claims.json` after `npm ci`.
-- `npm test`: 3 unit + 30 browser runs.
-- Live Playwright: 30/30.
-- `npx tsc --noEmit` and candidate-stamped `npm run build`.
-- `cargo test`: 7/7; fmt, clippy, and release build.
-- Cold first read and one-click populated sample.
-- Desktop and 390 px mobile; keyboard, visible focus, reduced motion, light/dark Axe, offline reload, service-worker update, and no console/page errors.
-- Live privacy request capture stayed same-origin.
-- Lighthouse mobile `/demo`: 99 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 1.4 s and CLS 0.
-- Response security and cache headers; real 404; initial JS/CSS/image budgets.
+   Immediately before this repair, the historical verifier failure could not
+   be reproduced: a fresh sequential live probe already returned request 41 as
+   `429` with `Retry-After: 1`. The scale limit was still corrected because the
+   deployed `maxReplicas: 3` topology left the failure mode possible.
 
-## Additional gaps
+3. **Private API caching.** The service worker now bypasses `/api/` requests,
+   so an expiring shared report cannot be retained in Cache Storage. Its cache
+   name was bumped to `v5` so installed clients update the policy.
 
-- The researched paid collaborative-report flow is absent from the UI.
-- The backend body-validation claim is tested internally rather than through the public authenticated route.
-- The service worker would cache successful private report API responses beyond server expiry.
-- No container engine was installed, so the Docker image could not be rebuilt; the exact frontend and release-binary stages were run directly.
+## Verification evidence
 
-## Verification artifacts
+- Clean install: `npm ci` — pass; `npm audit --omit=dev` reported zero
+  vulnerabilities.
+- Local quality gate: `npm test` — pass (3 unit and 30 Playwright runs);
+  `npx tsc --noEmit` — pass; `npm run build` — pass; `cargo test` — pass
+  (7 tests); `cargo fmt -- --check` — pass; `cargo clippy --all-targets --
+  -D warnings` — pass; `cargo build --release` — pass.
+- Exact regressions: `npm run test:e2e -- --grep @claim:demo-sandbox` — pass
+  in both Chromium projects; `cargo test
+  limiter_blocks_the_41st_request_with_retry_after` — pass; `cargo test
+  claim_backend_rate_limit` — pass.
+- Live identity: `/health` returns
+  `78146aa1af417cad16124689cee29bf31c1173b4`.
+- Live rate limit: `npm run verify:live-rate-limit` — requests 1–40 returned
+  `404`; request 41 returned `429` with `Retry-After: 1`.
+- Live response policy: malformed JSON `400`, valid report without license
+  `402`, 230 KB body `413`; a missing page returns `404` with CSP,
+  `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy`.
+- Live desktop and 390 px mobile: `PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e`
+  — 30/30 pass. This covers keyboard focus, Axe serious/critical checks,
+  privacy requests, offline demo reload, service-worker activation, routes,
+  exports/import, and responsive targets.
+- Live structure/console check: `/opt/fleet/lib/verify-url.sh` — pass. Its
+  title/lang/main/alt/console evidence and desktop/mobile screenshots are in
+  `.factory/evidence/repair-3/`.
 
-- `.factory/verification-4.md`
-- `.factory/evidence/verification-4/verify.json`
-- `.factory/evidence/verification-4/screenshot-desktop.png`
-- `.factory/evidence/verification-4/screenshot-mobile.png`
+The standalone `npx @axe-core/cli` could not start because its Selenium Chrome
+binary is absent in this worker. The product's installed Playwright Chromium
+ran the repository's `@axe-core/playwright` checks successfully on every
+public route in both desktop and mobile projects.
 
-No product code was modified.
+## Known non-blocking follow-up
+
+The independent report also noted that the paid collaborative-report UI and
+its restore-license flow are not present, even though dormant authenticated
+report API routes exist. That feature was not a release blocker in verification
+4 and was not expanded during this boundary repair. Do not advertise paid
+collaboration until its complete billing and retention path is implemented.
+
+## Run and deploy
+
+```sh
+npm ci
+npm test
+npx tsc --noEmit
+npm run build
+cargo test
+cargo fmt -- --check
+cargo clippy --all-targets -- -D warnings
+cargo build --release
+npm run verify:live-rate-limit
+```
+
+The factory deploys the root `Dockerfile` as a Container App on port 8080.
+Keep this SQLite-backed deployment at exactly one replica unless rate-limit
+and report state move to a shared durable store.
