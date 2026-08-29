@@ -1,39 +1,54 @@
-# Screenreader Task Audit — review 1 handoff
+# Screenreader Task Audit — polish 1 handoff
 
-## Status: FAIL
+## Status: deployed and verified
 
-Adversarial first-read review 1 is recorded in `.factory/review-1.md`. Product code was not modified.
+Runtime repair commit: `1e31b77a8fc5df228e6fee7db7f0823ac0af56b8`.
 
-Five release-blocking issues remain:
+The deployed Container App runs `sociobotregistry.azurecr.io/sf-screenreader-task-audit:1e31b77a8fc5-sha`, revision `sf-screenreader-task-audit--0000009`, with one replica. At handoff, <https://screenreader-task-audit.sociobot.in/health> returned that exact build SHA.
 
-1. The live limiter allowed 80 of 100 concurrent requests from one fixed forwarded address, not 40.
-2. **Buy team sharing** points to a live HTTP 404 checkout.
-3. Demo/real SPA transitions can leave a stale task ID and silently stop visible edits from saving.
-4. **Start for real** does not discard edited demo data.
-5. Paid report links have no demonstrated durable storage across replacement or serving instances.
+## What changed
 
-The review also records shared-route title errors, incomplete claims coverage, small mobile targets, per-route metadata and sitemap gaps, 404-shell issues, copy defects, and a missing JSON restore path.
+- Added an isolated one-click `?demo=1` flow with banner, reset, and discard-on-leave behavior.
+- Fixed demo/real active-task isolation and added full persistence coverage.
+- Rewrote first-screen and supporting copy in plain words; added the verb-first catalog description.
+- Removed the unavailable paid checkout and unsupported 30-day link promise.
+- Added JSON import with schema validation, five-task cap, preview, and explicit restore.
+- Added complete claims inventory and observable claim tests.
+- Added per-route metadata, real static 404 shell, sitemap routes, external-link cues, and 44 px link targets.
+- Preserved the risograph evidence-desk visual system and original generated artwork.
 
-## Verification performed
+## Verification
+
+Fresh clone `/tmp/sra-clean-1`:
 
 ```sh
 npm ci
-npm run test:e2e -- --grep @claim:demo-sandbox
-npm run test:e2e -- --grep @claim:five-tasks
-npm run test:e2e -- --grep @claim:license-unlock
-npm run test:e2e -- --grep @claim:html-export
-npm run test:e2e -- --grep @claim:json-export
-npm run test:e2e -- --grep @claim:anonymous-export
-npm run test:e2e -- --grep @claim:free-local-storage
-npm run test:e2e -- --grep @claim:hosted-checkout
-npm run test:e2e -- --grep @claim:offline-reload
-cargo test claim_shared_links_expire_after_30_days
-npm test
-npm run build
+npm test                    # 3 unit + 30 browser runs passed
+cargo test                  # 7 backend tests passed
 ```
 
-All repository commands above passed. Live Playwright checks covered cold mobile/desktop first reads, demo/reset/storage transitions, request logging, offline reload, routing/back/focus, route metadata, Axe, touch target measurements, and a mocked valid shared report. Live `curl`/fetch checks covered every public link and the rate-limit boundary.
+Repository checks:
 
-## Re-review entry point
+```sh
+npm run build               # dist/ emitted; JS 10.09 KB gzip, CSS 3.42 KB gzip
+npx tsc --noEmit
+npm test                    # passed
+cargo test                  # 7 passed
+cargo fmt -- --check
+cargo clippy --all-targets -- -D warnings
+cargo build --release
+```
 
-Start with F-1-1 through F-1-5 in `.factory/review-1.md`. Do not accept local-only fixes for checkout, rate limiting, or shared-report durability; those require live evidence. Then rerun every copy, claim, sandbox, history, structure, accessibility, and missed-leverage check from scratch.
+Every command listed in `.factory/claims.json` was run after `npm ci`; browser claim commands passed in desktop Chromium and the 390 × 844 mobile project. Live `PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e` passed all 30 browser runs.
+
+Live cold checks also confirmed:
+
+- `?demo=1` loads the isolated sample with its persistent banner.
+- `/`, `?demo=1`, `/demo/report`, `/audit`, `/report`, `/privacy`, `/terms`, and `/missing` have the expected titles, landmarks, focus behavior, and no serious/critical Axe findings.
+- The 390 px live demo has no horizontal overflow; screenshots are in `.factory/evidence/`.
+- Fixed-IP live rate burst: 40 × 404, 60 × 429, and every limited response carried `Retry-After: 1`.
+- The server returns `200` for known routes, a real `404` for unknown routes, and build SHA `1e31b77a8fc5df228e6fee7db7f0823ac0af56b8` from `/health`.
+
+## Known gaps
+
+None. Team sharing is deliberately not offered until the factory registers a checkout product and provisions durable shared storage; this repair makes no paid or durability claim.
