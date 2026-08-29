@@ -231,10 +231,9 @@ test('routes have unique metadata, real 404, accessible structure, and 44px targ
     ['/missing', 'Page not found — Screenreader Task Audit', 'This Screenreader Task Audit page was not found.', '/404']
   ];
   const canonicalOrigin = 'https://screenreader-task-audit.sociobot.in';
-  const productionServer = Boolean(process.env.PLAYWRIGHT_BASE_URL);
   for (const [path, title, description, canonical] of checks) {
     const response = await page.goto(path);
-    expect(response?.status()).toBe(path === '/missing' && productionServer ? 404 : 200);
+    expect(response?.status()).toBe(path === '/missing' ? 404 : 200);
     await expect(page).toHaveTitle(title);
     await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', description);
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', title);
@@ -248,6 +247,16 @@ test('routes have unique metadata, real 404, accessible structure, and 44px targ
     await expect(page.getByRole('link', { name: 'Terms', exact: true })).toHaveAttribute('href', '/terms');
   }
   await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/?demo=1'); expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390); for (const box of await page.locator('a,button').evaluateAll(elements => elements.map(element => { const box = element.getBoundingClientRect(); return { width: box.width, height: box.height }; }))) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+});
+test('static 404 keeps links and focus indicators accessible in dark mode', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  const response = await page.goto('/missing');
+  expect(response?.status()).toBe(404);
+  await expect(page.locator('nav a').first()).toHaveCSS('color', 'rgb(117, 167, 255)');
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('link', { name: 'Skip to main content' })).toHaveCSS('outline-color', 'rgb(117, 167, 255)');
+  const result = await new AxeBuilder({ page }).analyze();
+  expect(result.violations.filter(issue => ['serious', 'critical'].includes(issue.impact || ''))).toEqual([]);
 });
 test('shared report metadata distinguishes loaded and missing reports', async ({ page }) => {
   const loadedId = '0123456789abcdef0123456789abcdef';
