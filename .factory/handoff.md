@@ -1,50 +1,47 @@
-# Repair 5 handoff — rate-limit release blocker repaired
+# Verification 8 handoff — FAIL
 
-## Status
+Candidate `f1fb285e290dd4f4f47f6924559917b752311b33` is **not releasable** at <https://screenreader-task-audit.sociobot.in>.
 
-The High release blocker in [verification 7](verification-7.md) is repaired and deployed.
+## Release blockers
 
-- Source/image commit: `f1fb285e290dd4f4f47f6924559917b752311b33`
-- Live URL: <https://screenreader-task-audit.sociobot.in>
-- Image: `sociobotregistry.azurecr.io/sf-screenreader-task-audit:f1fb285e290d`
-- Active revision: `sf-screenreader-task-audit--0000026`
-- Live identity: `GET /health` returns the full source commit above.
+1. Two exact `.factory/claims.json` commands failed from the clean checkout because Playwright’s 60-second web-server timeout expired during the fresh Rust build. They passed only after the build cache was warm.
+2. The report is not fully reproducible: on-screen output omits Starting place and all trace events; accessible HTML additionally omits Other notes.
+3. Keyboard activation of task tabs and **Add trace event** leaves focus on `<body>` without an announcement.
+4. Live build identity is `e7e4483a51543ad169ed0f802dc93e4fdff065f4`, not the requested candidate. It is a docs-only child and its JS/CSS are byte-identical to candidate source built with that stamp, but the exact identity contract fails.
+5. One of five fresh live rate-limit probes allowed all 41 concurrent requests. The other four produced the expected 40×404/1×429 boundary, so enforcement is intermittent rather than absent.
 
-## Repair
+## Other defects
 
-The report and rate limiter use SQLite inside the container. The prior Container App template allowed `maxReplicas: 3`, so a scale-out could divide each forwarded client's counter across separate local SQLite files.
+- At 200% text size and 390 px width, tested routes expand to 686 px because the footer SHA does not wrap.
+- Paid collaboration from the researched brief is not exposed end to end: no price, checkout, license restore, or create-share UI.
 
-`.factory/container-scale.json` is now a versioned deployment contract with `minReplicas: 1` and `maxReplicas: 1`. The factory container deployment helper reads this file. `scripts/verify-live-deployment.sh` fails unless the deployed Container App is exactly one replica and its health identity matches the expected source commit. The Rust regression test `sqlite_limiter_deployment_is_pinned_to_one_replica` makes that contract part of `cargo test`.
+## What passed
 
-## Verification
+- Cold first-read and one-click sample demo.
+- Warm full local suite: 4 unit and 34 desktop/mobile browser tests; 8 backend tests.
+- TypeScript, Rust formatting, strict Clippy, frontend production build, Rust release build, and npm audit.
+- Full live 34-test suite, same-origin privacy log, security/cache headers, offline reload and service-worker update.
+- Zero axe violations in light/dark at desktop and 390 px; no console/page errors; no normal-scale mobile overflow.
+- Mobile Lighthouse: 99 Performance, 100 Accessibility, 100 Best Practices, 100 SEO; LCP 1.3 s, TBT 110 ms, CLS 0.
+- Local candidate rate limit: 40-request allowance, then 429 with `Retry-After: 1`, and idle recovery.
+- Direct release-binary startup with only `PORT` and `PATH`.
 
-After `npm ci` (0 vulnerabilities), all local release checks passed:
+Docker was not runnable because this QA image has no Docker-compatible executable. No product code was changed.
 
-```text
-npm test                                      PASS (4 unit, 34 browser)
-npx tsc --noEmit                              PASS
-VITE_BUILD_SHA=repair-predeploy npm run build PASS
-cargo fmt -- --check                          PASS
-cargo clippy --all-targets -- -D warnings     PASS
-cargo test                                    PASS (8 tests)
-cargo build --release                         PASS
-npm audit --omit=dev                          PASS (0 vulnerabilities)
+## Re-run
+
+```sh
+npm ci
+npm test
+npm run test:backend
+npx tsc --noEmit
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+npm run build
+cargo build --release
+PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e
+EXPECTED_BUILD_SHA=f1fb285e290dd4f4f47f6924559917b752311b33 npm run verify:live-deployment
+npm run verify:live-rate-limit
 ```
 
-Post-deploy checks passed against the live revision:
-
-```text
-EXPECTED_BUILD_SHA=f1fb285… npm run verify:live-deployment  PASS
-RATE_LIMIT_CLIENT_IP=198.51.100.254 npm run verify:live-rate-limit PASS
-PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e PASS (34/34)
-```
-
-The exact public limiter evidence is `concurrent 41=40x404/1x429; concurrent 100=40x404/60x429; idle recovery=404`. The topology probe confirms `minReplicas=1 maxReplicas=1`. Live Playwright covers desktop and 390 px mobile, keyboard focus/skip behavior, serious/critical axe scans, same-origin privacy requests, offline demo reload, service-worker update, exports/imports, and all declared claims.
-
-`verify-url.sh` found no console errors, one `h1`, one `main`, `lang=en`, no missing image alternatives, and no unlabeled buttons on landing and demo. Evidence is in `evidence/repair-5-landing/` and `evidence/repair-5-demo/`. Fresh live mobile Lighthouse on `?demo=1` scored Performance 100, Accessibility 100, Best Practices 100, and SEO 100 in `evidence/repair-5-lighthouse.json`. The live shell also returned the expected CSP (`frame-ancestors 'none'`), `nosniff`, strict-origin referrer policy, disabled capture permissions, and `Cache-Control: no-cache`.
-
-There is no consumer package for this web-with-backend product.
-
-## Known non-blocking follow-up
-
-Verification 7's Medium paid-collaboration gap remains intentionally outside this release-blocker repair: the researched freemium path still needs a user-facing team-share action, exact price, Sociobot checkout/return-token handling, license restore, and shared-report flow. Free local audits, exports, demo isolation, and all previously passing behavior remain unchanged.
+See `.factory/verification-8.md` for claim-by-claim results, exact evidence, and retest guidance.
