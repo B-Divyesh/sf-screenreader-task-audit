@@ -1,8 +1,10 @@
 # Polish round 2 — cumulative finding closure
 
-Candidate repaired: `43a0ba6a947306ed49d84d34d0bad8404d13deba`  
-Review commit: `4c0e1ec6af170022d35732f70843a4c844b9ab5c`  
-Product commits: `6f84525935fe84659757bb9b8f8495a67cd35e36`, `703b5ef1fe1393384aee58826da60a51be58f105`  
+Candidate repaired: `85bac86f9fe8eb9aa20c55c06b725c50b8cb7a3d`
+
+Review commit: `4c0e1ec6af170022d35732f70843a4c844b9ab5c`
+
+Product commits: `6f84525935fe84659757bb9b8f8495a67cd35e36`, `703b5ef1fe1393384aee58826da60a51be58f105`, `85bac86f9fe8eb9aa20c55c06b725c50b8cb7a3d`
 Live URL: <https://screenreader-task-audit.sociobot.in/?demo=1>
 
 Cold live screenshots: [landing desktop](evidence/polish-2-landing/screenshot-desktop.png), [landing mobile](evidence/polish-2-landing/screenshot-mobile.png), [demo desktop](evidence/polish-2-demo/screenshot-desktop.png), and [demo mobile](evidence/polish-2-demo/screenshot-mobile.png).
@@ -37,11 +39,11 @@ Cold live screenshots: [landing desktop](evidence/polish-2-landing/screenshot-de
 ## Final acceptance evidence
 
 - Every one of the 14 commands in `.factory/claims.json` passed independently from a clean clone.
-- Full frontend: 4 Vitest tests and 32 Playwright runs passed in desktop Chromium and 390 × 844 mobile Chromium.
+- Full frontend: 4 Vitest tests and 32 Playwright runs passed in desktop Chromium and 390 × 844 mobile Chromium. The consent claim exercises Space on the focused native checkbox.
 - Full backend: formatting, strict Clippy, 7 Rust tests, and release build passed.
 - Production cold suite: 32/32 browser runs passed against the live origin.
 - `/opt/fleet/lib/verify-url.sh` passed on `/` and `/?demo=1`; both reports contain zero console errors, one `h1`, one `main`, `lang=en`, and no missing image alternatives.
 - Lighthouse: performance 100, accessibility 100, best practices 100, SEO 100; LCP 1,651 ms, CLS 0, TBT 0 ms. Raw report: `.factory/lighthouse.json`.
-- Production image: `sociobotregistry.azurecr.io/sf-screenreader-task-audit:703b5ef1fe13`; `/health` returns the full source SHA.
+- Production image: `sociobotregistry.azurecr.io/sf-screenreader-task-audit:85bac86f9fe8`; `/health` returns the full source SHA. The Container App is explicitly `min=1,max=1`.
 
 No finding from review 1 or review 2 remains open.
