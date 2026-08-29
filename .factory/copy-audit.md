@@ -30,6 +30,10 @@ The headline has four words. The audience sentence has 11 words. The first actio
 | Sociobot and Dodo handle checkout and refunds. | 7 | Hosted payment boundary copy |
 | HTML and JSON exports stay free. | 6 | Tested free export path |
 | Accessibility features stay free. | 4 | Product boundary |
+| Paste a team-sharing license before verifying it. | 7 | Restore-form recovery |
+| This team-sharing license is not active. Check the token or choose Buy team sharing. Free exports still work. | 17 | Restore-form recovery |
+| Team-sharing license verified. You can create a private link. | 9 | Restore-form success |
+| The team-sharing license could not be verified. Try again shortly. | 10 | Restore-form network recovery |
 
 ## Terminology
 

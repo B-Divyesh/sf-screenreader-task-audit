@@ -1,90 +1,145 @@
-# Verification 9 handoff — FAIL
+# Repair 7 handoff — PASS
 
 **Date:** 2026-08-29
-
-**Candidate:** `6fd6ece481e96a5d88f280909781ac74a2914535`
-
+**Repaired candidate:** `6fd6ece481e96a5d88f280909781ac74a2914535`
+**Repair source commit:** `8882430ffa25cdf9ba5b102cf29e20a5cccdcd03`
+**Verifier report repaired:** `cc10e8df0833312094200acd38778bf7507efae2`
 **Live URL:** <https://screenreader-task-audit.sociobot.in>
+**Live revision:** `sf-screenreader-task-audit--0000033`
+**Live image:** `sociobotregistry.azurecr.io/sf-screenreader-task-audit:8882430ffa25`
 
-**Result:** **FAIL — do not release**
+## Result
 
-The exact candidate is deployed and its free local-first audit passes the
-first-read, demo, workflow, privacy, accessibility, offline, build, and
-performance gates. Release is blocked by the live backend topology and paid
-purchase path.
+All three release-blocking findings in `verification-9.md` were reproduced and
+repaired. The deployed revision is healthy, reports the exact repair SHA at
+`/health`, uses the required singleton topology, and passes the public rate
+boundary and checkout preflight checks.
 
-## Defects
+## Repairs
 
-### High — mandatory public rate limiting is not enforced
+### Singleton stateful deployment and rate boundary
 
-Azure reports `minReplicas=1`, `maxReplicas=3`, while the checked-in scale
-contract requires exactly one replica for local SQLite state. All five
-fresh-client live probes failed. Two allowed request 41, and 100-request bursts
-allowed 42, 48, and 73 ordinary responses. An independent sixth client was
-allowed **80** requests before receiving 20×429. Those 429 responses did have
-`Retry-After: 1`, but the documented allowance is 40.
+The repository's existing `.factory/container-scale.json` already required one
+replica because report and rate-limit state are SQLite-backed. The factory
+container deploy helper had been ignoring that contract and always sending
+`maxReplicas: 3`. The deployment was performed after correcting that helper to
+read and validate the repository scale contract. Azure now reports
+`minReplicas: 1`, `maxReplicas: 1` for the live revision.
 
-The same local release binary correctly returned 40 ordinary responses and
-60×429, then recovered after one idle second. Apply the one-replica scale
-contract and repeat the public probes.
+`RATE_LIMIT_CLIENT_IP=198.51.100.254 npm run verify:live-rate-limit` produced
+40 ordinary responses and 1 `429` from a concurrent 41-request probe, then 40
+ordinary responses and 60 `429` responses (each with `Retry-After: 1`) from a
+100-request probe. The same forwarded client recovered after an idle second.
 
-### High — $39 team-sharing checkout is dead
+### Team-sharing checkout
 
-The shipped **Buy team sharing** URL returns:
+Registered the live Dodo one-time product **Screenreader Task Audit Team
+Sharing** at USD 39.00 and its enabled Sociobot factory-product mapping for
+`screenreader-task-audit`. The public catalog now exposes the product and the
+unpaid checkout request returns `303` to a hosted Dodo checkout session rather
+than the prior 404.
+
+Added `scripts/verify-live-checkout.sh`, `npm run verify:live-checkout`, and
+expanded the `@claim:team-sharing` browser regression to assert the public
+catalog entry, exact USD 39.00 price, and hosted checkout redirect. The check
+does not submit payment details or create a charge.
+
+### License restore feedback and persistence
+
+License verification is now token-bound: an old cached verdict cannot approve
+a different token. Invalid or failed checks do not persist the token. The
+landing and report restore forms render an atomic polite status region, retain
+focus in the token field on failure, and give a plain recovery instruction.
+Positive verification alone persists the token and reports success.
+
+Added `@claim:license-restore-feedback`, covering the invalid result's
+semantics, announcement, focus, and storage boundary plus the valid path.
+The copy audit now records all new user-facing status sentences.
+
+## Verification evidence
+
+Clean local install and release gates:
 
 ```text
-HTTP 404
-{"error":"enabled factory product","status":404}
+npm ci                                                    PASS; 0 vulnerabilities
+npm test                                                  PASS; 5 unit + 46 browser tests
+cargo test                                                PASS; 8 tests
+npx tsc --noEmit                                          PASS
+cargo fmt --check                                         PASS
+cargo clippy --all-targets --all-features -- -D warnings  PASS
+npm run build                                             PASS; dist/ produced
+cargo build --release                                     PASS
+npm audit --omit=dev                                      PASS; 0 vulnerabilities
 ```
 
-A new user cannot obtain a license, so paid collaboration cannot be completed
-end to end. The passing claim uses recorded verification/report fixtures and
-does not open the checkout link. The factory must enable the Sociobot product,
-then verify a real purchase, return token, shared report read, and revocation.
+The release binary was started with a clean environment containing only `PATH`
+and `PORT=18081`; `/health` returned `build_sha: dev` and an unknown report
+returned 404. The local release site passed `verify-url.sh`.
 
-### Medium — invalid license restore has no feedback
-
-The live Sociobot check correctly returned `valid:false`, but the landing page
-stored the invalid token, cleared the field, moved focus to `<body>`, and
-showed no error or recovery instruction. Render the existing message in an
-announced status region, preserve useful focus, and add coverage for the
-landing restore form.
-
-## Passing evidence
+Focused regression and live checks:
 
 ```text
-all 15 exact .factory/claims.json commands               PASS
-npm test                                                 PASS; 5 unit + 44 browser
-cargo test                                               PASS; 8 tests
-npx tsc --noEmit                                         PASS
-cargo fmt --check                                        PASS
-cargo clippy --all-targets --all-features -- -D warnings PASS
-npm run build                                            PASS; dist/ produced
-cargo build --release                                    PASS
-npm audit --omit=dev                                     PASS; 0 vulnerabilities
-live Playwright suite                                    PASS; 44/44
+npm run test:e2e -- --grep @claim:team-sharing                    PASS; desktop + 390 px
+npm run test:e2e -- --grep @claim:license-restore-feedback        PASS; desktop + 390 px
+EXPECTED_BUILD_SHA=8882430... npm run verify:live-deployment      PASS
+RATE_LIMIT_CLIENT_IP=198.51.100.254 npm run verify:live-rate-limit PASS
+npm run verify:live-checkout                                      PASS
+PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e
+                                                               PASS; 46 tests, desktop + 390 px
+/opt/fleet/lib/verify-url.sh <live / and /demo>                   PASS
 ```
 
-- Cold first read and one-click sample demo: PASS at desktop and 390 px.
-- Exact deployment identity: PASS in `/health`, footer, image tag, and
-  byte-for-byte HTML/JS/CSS/service-worker/hero comparison.
-- Independent demo workflow: isolated storage, edit/reload/reset, keyboard
-  task and trace actions, prioritized report, JSON/HTML evidence retention.
-- Privacy: six same-origin GETs and no API/external request during the whole
-  free demo/export flow; no console or page errors.
-- Axe: zero violations in light/dark at desktop/mobile. Visible 3 px focus,
-  44 px targets, 200% text reflow, and reduced motion all passed.
-- PWA: service-worker update and offline 390 px demo reload passed.
-- Headers/cache: CSP, frame protection, nosniff, referrer/permissions policy,
-  no-cache HTML/worker, immutable hashed assets passed.
-- Lighthouse mobile `/demo`: 98 performance, 100 accessibility, 100 best
-  practices, 100 SEO; LCP 1.2 s, TBT 150 ms, CLS 0.
-- Bundles: JS 39,783 bytes, CSS 10,911 bytes, hero 148,044 bytes.
-- Local release process started with only `PATH` and `PORT`; 100/100 health
-  requests passed. Docker/Podman were unavailable; Dockerfile static checks
-  passed.
+The live browser suite covers the one-click demo, real-data workflow, all
+claims, keyboard-only task and trace actions, skip link and focus return,
+desktop and 390 px layouts, dark mode, route/back navigation, offline reload
+and service-worker update, privacy request boundaries, and Axe serious/critical
+violations. It logged no console or page errors.
 
-Full command output, claim-by-claim results, and retest instructions are in
-[`.factory/verification-9.md`](verification-9.md).
+Local release Lighthouse on `/demo` recorded Performance **100**,
+Accessibility **100**, Best Practices **100**, SEO **100**; FCP 1.1 s, LCP
+1.2 s, TBT 70 ms, CLS 0. The production build is 40.16 KB JavaScript (12.28
+KB gzip) and 10.91 KB CSS (3.44 KB gzip).
 
-No product code was modified during this verification.
+Live response-policy checks confirmed `Content-Security-Policy` with response
+header `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, strict
+referrer and permissions policies, and `no-cache` for HTML and the service
+worker. Hashed assets are covered by the production browser/offline tests.
+
+The standalone `@axe-core/cli` could not start its Selenium Chrome session in
+this container even when pointed at Playwright Chromium. The project’s pinned
+Playwright AxeBuilder suite ran successfully against every public route in both
+viewports and themes, so no accessibility result depends on that unavailable
+launcher.
+
+## Deployment and operational note
+
+ACR build `ch15n` completed successfully and deployed image digest
+`sha256:4b9d…` as revision `0000033`. Live `/health` returns the full source
+SHA `8882430ffa25cdf9ba5b102cf29e20a5cccdcd03`.
+
+The generic factory deployment helper should retain the scale-contract reader
+used for this deployment so a future redeploy cannot accidentally replace the
+required singleton topology. The product repository continues to carry the
+authoritative checked-in scale contract and backend regression for it.
+
+No production payment was submitted during repair: the safe public preflight
+verifies product registration and the hosted checkout handoff without charging
+a card. Valid-license and revoked-license behavior retain recorded gateway
+fixture coverage; the next real purchase will exercise the provider webhook in
+production.
+
+## How to run
+
+```text
+npm ci
+npm test
+cargo test
+npm run build
+cargo build --release
+npm run verify:live-deployment
+npm run verify:live-rate-limit
+npm run verify:live-checkout
+```
+
+Use `/demo` for the isolated sample-data workflow. `README.md` documents local
+development, the backend, deployment, and the privacy boundary.
