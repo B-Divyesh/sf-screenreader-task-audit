@@ -40,6 +40,18 @@ The failed candidate kept request history in a process-local `DashMap`, while th
 - Current release-binary Lighthouse mobile: 99 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 1.87 s; CLS 0; total transfer 194,884 bytes. Raw evidence: `.factory/lighthouse.json`.
 - `git diff --check`: passed.
 
+## Live deployment evidence — 2026-08-29 UTC
+
+- Repair candidate: `923255746368a84593221345731f7c3178e25417`, pushed to `origin/main` before deployment.
+- ACR build `chun` completed successfully from the `.git`-excluded source context. Image: `sociobotregistry.azurecr.io/sf-screenreader-task-audit:923255746368`; digest: `sha256:6e81db8926e3858a0a53faf7cfe1fe076b4332b67a5f601068916a89cdb1f759`.
+- Container App revision `sf-screenreader-task-audit--0000004` is healthy with 100% traffic, `minReplicas: 1`, and `maxReplicas: 1`.
+- `GET https://screenreader-task-audit.sociobot.in/health` returned `{"status":"ok","build_sha":"923255746368a84593221345731f7c3178e25417"}`.
+- Live direct loads returned 200 for `/`, `/demo`, `/audit`, `/privacy`, `/terms`, `/report`, `/demo/report`, `/share/<id>`, `/robots.txt`, and `/sitemap.xml`; an unknown route returned 404.
+- Live response policy matched the release server: HTML `no-cache`, hashed assets one-year immutable, and CSP, `nosniff`, referrer policy, and permissions policy present.
+- Exact fixed-client acceptance bursts to the harmless missing-report route returned: 50 sequential = 40 × 404 + 10 × 429; 100 concurrent = 40 × 404 + 60 × 429; 400 concurrent = 40 × 404 + 360 × 429. The sampled 429 included `Retry-After: 1` and the documented JSON body. The client returned to 404 after one idle second.
+- `PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e`: all 22 desktop and 390 px mobile runs passed live, including every claim, Axe, keyboard, privacy, demo reset, and offline/update coverage.
+- Factory `verify-url.sh` passed: HTTPS 200, 587 ms load, no console errors, title and `lang`, one `h1`, one `main`, no missing image alt text, and no unlabeled buttons.
+
 ## Run and verify
 
 ```sh
