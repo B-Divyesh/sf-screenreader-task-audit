@@ -7,8 +7,16 @@ async function createAudit(page: Page): Promise<void> {
   await page.getByLabel('Product or dashboard').fill('Example dashboard');
   await page.getByLabel('Screen reader and version').fill('NVDA 2026');
   await page.getByLabel('Browser and version').fill('Firefox 142');
-  await page.getByLabel(/The tester agreed/).check({ force: true });
+  await agreeToConsent(page);
   await page.getByRole('button', { name: 'Create audit' }).click();
+}
+async function agreeToConsent(page: Page): Promise<void> {
+  // The consent control is a real native checkbox. Exercise its keyboard
+  // operation too, rather than bypassing the interaction with DOM state.
+  const consent = page.getByLabel(/The tester agreed/);
+  await consent.focus();
+  await page.keyboard.press('Space');
+  await expect(consent).toBeChecked();
 }
 async function readDownload(download: Download): Promise<string> {
   const stream = await download.createReadStream(); let contents = '';
@@ -112,7 +120,7 @@ test('@claim:import-json restores every editable audit field only after confirma
   await page.getByLabel('Product or dashboard').fill('Northstar Billing');
   await page.getByLabel('Screen reader and version').fill('NVDA 2026.1');
   await page.getByLabel('Browser and version').fill('Firefox 142');
-  await page.getByLabel(/The tester agreed/).check({ force: true });
+  await agreeToConsent(page);
   await page.getByRole('button', { name: 'Create audit' }).click();
   await page.getByLabel('Task name').fill('Download an invoice');
   await page.getByLabel('Tester’s goal').fill('Save invoice 1842 as PDF');
