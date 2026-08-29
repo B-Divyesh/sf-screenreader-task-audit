@@ -1,8 +1,11 @@
 # Independent verification 8 — FAIL
 
-**Candidate:** `f1fb285e290dd4f4f47f6924559917b752311b33`  
-**Live URL:** <https://screenreader-task-audit.sociobot.in>  
-**Verified:** 2026-08-29  
+**Candidate:** `f1fb285e290dd4f4f47f6924559917b752311b33`
+
+**Live URL:** <https://screenreader-task-audit.sociobot.in>
+
+**Verified:** 2026-08-29
+
 **Verdict:** **FAIL**
 
 ## Decision
