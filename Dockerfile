@@ -9,7 +9,7 @@ ARG BUILD_SHA=dev
 ENV VITE_BUILD_SHA=$BUILD_SHA
 RUN npm run build
 
-FROM rust:1.90-alpine AS backend
+FROM rust:1-alpine AS backend
 WORKDIR /app
 RUN apk add --no-cache musl-dev
 COPY Cargo.toml Cargo.lock* ./

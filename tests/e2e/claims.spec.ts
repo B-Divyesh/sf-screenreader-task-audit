@@ -156,6 +156,9 @@ test('landing and audit pages have no serious accessibility findings', async ({ 
 test('keyboard route changes focus the page heading', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('Tab');
+  await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('main')).toBeFocused();
   await page.keyboard.press('Tab');
   await page.getByRole('link', { name: 'Demo', exact: true }).press('Enter');
   await expect(page.locator('h1')).toBeFocused();

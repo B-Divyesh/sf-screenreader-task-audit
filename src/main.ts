@@ -60,7 +60,7 @@ function shell(content: string): string {
 }
 
 function landing(): string {
-  return shell(`<main id="main">
+  return shell(`<main id="main" tabindex="-1">
     <section class="page hero" aria-labelledby="page-title"><div class="hero-copy">
       <p class="eyebrow">Evidence, not a score</p>
       <h1 id="page-title" tabindex="-1">Prove which screen-reader tasks work</h1>
@@ -76,7 +76,7 @@ function landing(): string {
 }
 
 function setupPage(): string {
-  return shell(`<main id="main" class="app-page"><p class="eyebrow">New audit</p><h1 id="page-title" tabindex="-1">Set up a screen-reader task audit</h1><div class="setup"><p>Record the test environment. Do not enter a tester’s real name.</p><form id="setup-form" novalidate>
+  return shell(`<main id="main" tabindex="-1" class="app-page"><p class="eyebrow">New audit</p><h1 id="page-title" tabindex="-1">Set up a screen-reader task audit</h1><div class="setup"><p>Record the test environment. Do not enter a tester’s real name.</p><form id="setup-form" novalidate>
     <div class="field"><label for="audit-name">Audit name</label><input id="audit-name" name="name" type="text" required maxlength="80" value="${escapeHtml(audit.name)}"><p class="hint">Example: August analytics check</p></div>
     <div class="field"><label for="product">Product or dashboard</label><input id="product" name="product" type="text" required maxlength="80" value="${escapeHtml(audit.product)}"></div>
     <div class="form-grid"><div class="field"><label for="at">Screen reader and version</label><input id="at" name="assistiveTech" type="text" required maxlength="80" value="${escapeHtml(audit.assistiveTech)}"></div><div class="field"><label for="browser">Browser and version</label><input id="browser" name="browser" type="text" required maxlength="80" value="${escapeHtml(audit.browser)}"></div></div>
@@ -97,7 +97,7 @@ function workspace(): string {
   const task = audit.tasks.find(item => item.id === activeTaskId) || audit.tasks[0];
   const tabs = audit.tasks.map((item, index) => `<li><button class="task-tab" data-task="${item.id}" aria-current="${item.id === task?.id}"><span class="task-num">${String(index + 1).padStart(2, '0')}</span>${escapeHtml(item.title || 'Untitled task')}</button></li>`).join('');
   const sheet = task ? taskSheet(task) : `<section class="sheet"><h2>No tasks yet</h2><p>Add the first essential task. Its observations will appear here.</p><button class="primary" id="add-task-empty">Add first task</button></section>`;
-  return shell(`<main id="main" class="app-page"><p class="eyebrow">${demoMode ? 'Sample audit' : 'Saved in this browser'}</p><h1 id="page-title" tabindex="-1">${escapeHtml(audit.name || 'Screen-reader task audit')}</h1><p class="lede">${escapeHtml(audit.product)} · ${escapeHtml(audit.assistiveTech)} · ${escapeHtml(audit.browser)}</p>
+  return shell(`<main id="main" tabindex="-1" class="app-page"><p class="eyebrow">${demoMode ? 'Sample audit' : 'Saved in this browser'}</p><h1 id="page-title" tabindex="-1">${escapeHtml(audit.name || 'Screen-reader task audit')}</h1><p class="lede">${escapeHtml(audit.product)} · ${escapeHtml(audit.assistiveTech)} · ${escapeHtml(audit.browser)}</p>
     <div class="toolbar"><a class="button" href="${demoMode ? '/demo/report' : '/report'}" data-link>Review report</a>${demoMode ? '' : '<button class="quiet" id="edit-setup" type="button">Edit audit details</button>'}</div>
     <p id="save-status" class="status" aria-live="polite">${escapeHtml(message)}</p>
     <div class="audit-layout"><aside class="task-rail" aria-label="Audit tasks"><h2>Critical tasks</h2><p class="count">${audit.tasks.length} of 5 tasks</p><ol>${tabs}</ol><button id="add-task" type="button" ${audit.tasks.length >= 5 ? 'disabled' : ''}>Add task</button></aside>${sheet}</div>
@@ -127,7 +127,7 @@ function traceForm(): string {
 function reportPage(): string {
   const report = reportData(audit, false);
   const tasks = [...audit.tasks].sort((a,b) => priority(b)-priority(a)).map((task,index) => `<article class="report-task"><p class="stamp">Priority ${index + 1} · ${escapeHtml(task.severity)}</p><h2>${escapeHtml(task.title || 'Untitled task')}</h2><p><strong>Result:</strong> ${escapeHtml(task.outcome.replace('-', ' '))}</p><dl><dt>Tester’s goal</dt><dd>${escapeHtml(task.goal || 'Not recorded')}</dd><dt>Expected steps</dt><dd>${escapeHtml(task.expected || 'Not recorded')}</dd><dt>Announcements heard</dt><dd>${escapeHtml(task.announced || 'Not recorded')}</dd><dt>Focus movement</dt><dd>${escapeHtml(task.focus || 'Not recorded')}</dd><dt>Blocker</dt><dd>${escapeHtml(task.blocker || 'None recorded')}</dd><dt>Other notes</dt><dd>${escapeHtml(task.notes || 'None recorded')}</dd></dl></article>`).join('');
-  return shell(`<main id="main" class="app-page"><p class="eyebrow">Prioritized evidence</p><h1 id="page-title" tabindex="-1">Report: ${escapeHtml(audit.name || 'Untitled audit')}</h1><p class="lede">${escapeHtml(audit.product || 'Product not named')} · ${escapeHtml(audit.assistiveTech)} · ${escapeHtml(audit.browser)}</p><div class="summary-strip"><span class="chip">${report.summary.completed} completed</span><span class="chip">${report.summary.partial} partial</span><span class="chip blocked">${report.summary.blocked} blocked</span><span class="chip">${report.summary.notTested} not tested</span></div>
+  return shell(`<main id="main" tabindex="-1" class="app-page"><p class="eyebrow">Prioritized evidence</p><h1 id="page-title" tabindex="-1">Report: ${escapeHtml(audit.name || 'Untitled audit')}</h1><p class="lede">${escapeHtml(audit.product || 'Product not named')} · ${escapeHtml(audit.assistiveTech)} · ${escapeHtml(audit.browser)}</p><div class="summary-strip"><span class="chip">${report.summary.completed} completed</span><span class="chip">${report.summary.partial} partial</span><span class="chip blocked">${report.summary.blocked} blocked</span><span class="chip">${report.summary.notTested} not tested</span></div>
     <div class="notice"><strong>This is observed task evidence.</strong> It is not an accessibility certification or legal advice.</div>
     <div class="toolbar"><button id="export-html" type="button">Export accessible HTML</button><button id="export-json" type="button">Export JSON</button><span class="check"><input id="anonymous" type="checkbox"><label for="anonymous">Remove product and environment names</label></span><a href="${demoMode ? '/demo' : '/audit'}" data-link>Back to audit</a></div>
     <p id="report-status" class="status" aria-live="polite">${escapeHtml(message)}</p>${tasks || '<section class="sheet"><h2>No report items yet</h2><p>Add a task to create the report.</p></section>'}
@@ -139,11 +139,11 @@ function legalPage(kind: 'privacy'|'terms'): string {
   const privacy = `<p class="lede">Your audit stays under your control.</p><h2>Data saved in your browser</h2><p>The free audit stores task names, observations, and settings in local storage. Demo data uses a separate demo key.</p><h2>Data sent to the server</h2><p>No audit content leaves your browser until a licensed user creates a private report link. That action sends the report you reviewed.</p><h2>Shared reports</h2><p>Shared reports use a random link and expire after 30 days. The server stores the report until it expires. Do not enter passwords, private page text, or analytics payloads.</p><h2>Payments</h2><p>Sociobot and Dodo handle checkout, payment details, license checks, and refunds. This product does not receive card details.</p><h2>Your choices</h2><p>Clear this site’s browser storage to remove a local audit. A shared report expires automatically.</p>`;
   const terms = `<p class="lede">Use this tool to record honest task observations.</p><h2>What the tool provides</h2><p>The tool structures screen-reader task evidence and creates reports. It does not certify accessibility or provide legal advice.</p><h2>Your responsibilities</h2><p>Get the tester’s consent. Do not record passwords, secret data, private page text, or analytics payloads.</p><h2>Paid license</h2><p>Team sharing is a one-time $39 purchase. Sociobot and Dodo are the merchant of record. Their checkout handles refunds. A refund revokes the license.</p><h2>Availability</h2><p>The free local audit works without an account. Shared links may be removed for abuse or security needs.</p><h2>Warranty</h2><p>The software is provided as is under the MIT License.</p>`;
   const title = kind === 'privacy' ? 'Privacy for your task evidence' : 'Terms for using this audit';
-  return shell(`<main id="main" class="page narrow"><p class="eyebrow">${kind === 'privacy' ? 'Privacy' : 'Terms'}</p><h1 id="page-title" tabindex="-1">${title}</h1>${kind === 'privacy' ? privacy : terms}<p>Last updated: 28 August 2026.</p></main>`);
+  return shell(`<main id="main" tabindex="-1" class="page narrow"><p class="eyebrow">${kind === 'privacy' ? 'Privacy' : 'Terms'}</p><h1 id="page-title" tabindex="-1">${title}</h1>${kind === 'privacy' ? privacy : terms}<p>Last updated: 28 August 2026.</p></main>`);
 }
 
 function notFound(): string {
-  return shell(`<main id="main" class="page narrow"><p class="eyebrow">404 · Missing slip</p><h1 id="page-title" tabindex="-1">This audit page is not here</h1><p>The link may be incomplete or expired.</p><a class="button primary" href="/" data-link>Return home</a></main>`);
+  return shell(`<main id="main" tabindex="-1" class="page narrow"><p class="eyebrow">404 · Missing slip</p><h1 id="page-title" tabindex="-1">This audit page is not here</h1><p>The link may be incomplete or expired.</p><a class="button primary" href="/" data-link>Return home</a></main>`);
 }
 
 async function sharedReport(id: string): Promise<string> {
@@ -152,8 +152,8 @@ async function sharedReport(id: string): Promise<string> {
     if (!response.ok) return notFound();
     const data = await response.json() as ReturnType<typeof reportData>;
     const tasks = data.tasks.map((task,index) => `<article class="report-task"><p class="stamp">Priority ${index+1} · ${escapeHtml(task.severity)}</p><h2>${escapeHtml(task.title)}</h2><p><strong>Result:</strong> ${escapeHtml(task.outcome)}</p><dl><dt>Goal</dt><dd>${escapeHtml(task.goal||'Not recorded')}</dd><dt>Announcements</dt><dd>${escapeHtml(task.announced||'Not recorded')}</dd><dt>Focus</dt><dd>${escapeHtml(task.focus||'Not recorded')}</dd><dt>Blocker</dt><dd>${escapeHtml(task.blocker||'None recorded')}</dd></dl></article>`).join('');
-    return shell(`<main id="main" class="page shared-report"><p class="eyebrow">Shared task evidence</p><h1 id="page-title" tabindex="-1">${escapeHtml(data.audit)}</h1><p class="lede">${escapeHtml(data.product)} · ${escapeHtml(data.environment)}</p><div class="notice">This private report expires 30 days after it was shared.</div>${tasks}</main>`);
-  } catch { return shell(`<main id="main" class="page narrow"><p class="eyebrow">Connection error</p><h1 id="page-title" tabindex="-1">The shared report did not load</h1><p>Check your connection, then reload this page.</p></main>`); }
+    return shell(`<main id="main" tabindex="-1" class="page shared-report"><p class="eyebrow">Shared task evidence</p><h1 id="page-title" tabindex="-1">${escapeHtml(data.audit)}</h1><p class="lede">${escapeHtml(data.product)} · ${escapeHtml(data.environment)}</p><div class="notice">This private report expires 30 days after it was shared.</div>${tasks}</main>`);
+  } catch { return shell(`<main id="main" tabindex="-1" class="page narrow"><p class="eyebrow">Connection error</p><h1 id="page-title" tabindex="-1">The shared report did not load</h1><p>Check your connection, then reload this page.</p></main>`); }
 }
 
 function titleFor(path: string): string {

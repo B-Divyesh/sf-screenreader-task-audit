@@ -26,7 +26,7 @@ Free audits stay in browser local storage under `sra:audit:v1`. Audit content is
 
 ## Develop
 
-Requirements: Node 22+, npm, Rust 1.90+, and SQLite build support.
+Requirements: Node 22+, npm, current stable Rust, and SQLite build support.
 
 ```sh
 npm install
@@ -69,7 +69,7 @@ The axum server serves `dist/`, stores explicitly shared reports in SQLite, and 
 - `POST /api/reports`
 - `GET /api/reports/:id`
 
-API routes accept at most 40 requests per second from the first `X-Forwarded-For` address. Limited responses return `429` and `Retry-After: 1`. Report bodies are capped at 220 KB and five tasks. The server verifies the license again before it stores a shared report.
+API routes accept a burst of 40 requests from the first `X-Forwarded-For` address. One idle second resets the allowance. Continuous bursts cannot refill it while requests are still arriving. Limited responses return `429` and `Retry-After: 1`. The atomic allowance is stored beside reports in SQLite, so independent app instances using the same database cannot multiply it. Report bodies are capped at 220 KB and five tasks. The server verifies the license again before it stores a shared report.
 
 ## Privacy and payment
 

@@ -6,18 +6,13 @@ use axum::{
     routing::{get, get_service, post},
     Json, Router,
 };
-use dashmap::DashMap;
 use serde::Serialize;
 use serde_json::Value;
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
-use std::{
-    collections::VecDeque,
-    env,
-    net::SocketAddr,
-    path::PathBuf,
-    sync::Arc,
-    time::{Duration, Instant},
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+    SqlitePool,
 };
+use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, time::Duration};
 use tokio::signal;
 use tower_http::{
     limit::RequestBodyLimitLayer,
@@ -30,7 +25,6 @@ use uuid::Uuid;
 struct AppState {
     db: SqlitePool,
     build_sha: String,
-    rate: Arc<DashMap<String, VecDeque<Instant>>>,
     http: reqwest::Client,
 }
 
@@ -210,28 +204,67 @@ async fn rate_limit(State(state): State<AppState>, request: Request, next: Next)
         .filter(|v| !v.is_empty())
         .unwrap_or("unknown")
         .to_string();
-    let now = Instant::now();
-    let mut hits = state.rate.entry(key).or_default();
-    while hits
-        .front()
-        .is_some_and(|at| now.duration_since(*at) > Duration::from_secs(1))
-    {
-        hits.pop_front();
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    match record_api_request(&state.db, &key, now_ms).await {
+        Ok(hits) if hits <= 40 => next.run(request).await,
+        Ok(_) => rate_limit_response(),
+        Err(error) => {
+            // A failed limiter must not silently turn into an unlimited API.
+            tracing::error!(%error, "rate limiter unavailable");
+            let mut response = (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({
+                    "error":"The server cannot safely accept this request. Try again in one second."
+                })),
+            )
+                .into_response();
+            response
+                .headers_mut()
+                .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+            response
+        }
     }
-    if hits.len() >= 40 {
-        let mut response = (
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(serde_json::json!({"error":"Too many requests. Try again in one second."})),
-        )
-            .into_response();
-        response
-            .headers_mut()
-            .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
-        return response;
+}
+
+async fn record_api_request(
+    db: &SqlitePool,
+    client_key: &str,
+    now_ms: i64,
+) -> Result<i64, sqlx::Error> {
+    // One atomic statement makes the allowance common to every router/process
+    // using the same SQLite database. A one-second idle gap opens a fresh burst;
+    // continuous traffic cannot refill the allowance while it is still arriving.
+    let hits = sqlx::query_scalar::<_, i64>(
+        "INSERT INTO api_rate_limits (client_key, hits, last_seen_ms) VALUES (?, 1, ?) \
+         ON CONFLICT(client_key) DO UPDATE SET \
+           hits = CASE WHEN excluded.last_seen_ms - api_rate_limits.last_seen_ms >= 1000 \
+                       THEN 1 ELSE api_rate_limits.hits + 1 END, \
+           last_seen_ms = excluded.last_seen_ms \
+         RETURNING hits",
+    )
+    .bind(client_key)
+    .bind(now_ms)
+    .fetch_one(db)
+    .await?;
+    if hits == 1 {
+        sqlx::query("DELETE FROM api_rate_limits WHERE last_seen_ms < ?")
+            .bind(now_ms - 60_000)
+            .execute(db)
+            .await?;
     }
-    hits.push_back(now);
-    drop(hits);
-    next.run(request).await
+    Ok(hits)
+}
+
+fn rate_limit_response() -> Response {
+    let mut response = (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(serde_json::json!({"error":"Too many requests. Try again in one second."})),
+    )
+        .into_response();
+    response
+        .headers_mut()
+        .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+    response
 }
 
 async fn security_headers(request: Request, next: Next) -> Response {
@@ -311,11 +344,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = env::var("DATA_DIR").unwrap_or_else(|_| "data".into());
     std::fs::create_dir_all(&data_dir)?;
     let db_url = format!("sqlite://{data_dir}/reports.db?mode=rwc");
+    let db_options = SqliteConnectOptions::from_str(&db_url)?
+        .create_if_missing(true)
+        .busy_timeout(Duration::from_secs(5));
     let db = SqlitePoolOptions::new()
         .max_connections(5)
-        .connect(&db_url)
+        .connect_with(db_options)
         .await?;
-    sqlx::query("CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, report TEXT NOT NULL, expires_at INTEGER NOT NULL)").execute(&db).await?;
+    initialize_database(&db).await?;
     sqlx::query("DELETE FROM reports WHERE expires_at <= ?")
         .bind(chrono::Utc::now().timestamp())
         .execute(&db)
@@ -324,7 +360,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         db,
         build_sha,
-        rate: Arc::new(DashMap::new()),
         http: reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
             .build()?,
@@ -335,6 +370,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         app(state, PathBuf::from("dist")).into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown())
+    .await?;
+    Ok(())
+}
+
+async fn initialize_database(db: &SqlitePool) -> Result<(), sqlx::Error> {
+    sqlx::query("CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, report TEXT NOT NULL, expires_at INTEGER NOT NULL)")
+        .execute(db)
+        .await?;
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS api_rate_limits (\
+           client_key TEXT PRIMARY KEY, \
+           hits INTEGER NOT NULL, \
+           last_seen_ms INTEGER NOT NULL\
+         ) WITHOUT ROWID",
+    )
+    .execute(db)
     .await?;
     Ok(())
 }
@@ -368,11 +419,10 @@ mod tests {
             .connect("sqlite::memory:")
             .await
             .unwrap();
-        sqlx::query("CREATE TABLE reports (id TEXT PRIMARY KEY, report TEXT NOT NULL, expires_at INTEGER NOT NULL)").execute(&db).await.unwrap();
+        initialize_database(&db).await.unwrap();
         AppState {
             db,
             build_sha: "test-sha".into(),
-            rate: Arc::new(DashMap::new()),
             http: reqwest::Client::new(),
         }
     }
@@ -469,6 +519,89 @@ mod tests {
         }
         let response = limited.expect("burst should be limited");
         assert_eq!(response.headers().get("retry-after").unwrap(), "1");
+    }
+
+    #[tokio::test]
+    async fn limiter_is_atomic_across_instances_for_the_verifiers_exact_burst() {
+        let db_path = std::env::temp_dir().join(format!(
+            "screenreader-task-audit-rate-{}.db",
+            Uuid::new_v4()
+        ));
+        let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+        let options = SqliteConnectOptions::from_str(&db_url)
+            .unwrap()
+            .create_if_missing(true)
+            .busy_timeout(Duration::from_secs(5));
+        let db_one = SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect_with(options.clone())
+            .await
+            .unwrap();
+        initialize_database(&db_one).await.unwrap();
+        let db_two = SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect_with(options)
+            .await
+            .unwrap();
+        let state_one = AppState {
+            db: db_one.clone(),
+            build_sha: "instance-one".into(),
+            http: reqwest::Client::new(),
+        };
+        let state_two = AppState {
+            db: db_two.clone(),
+            build_sha: "instance-two".into(),
+            http: reqwest::Client::new(),
+        };
+        let apps = [app(state_one, test_dist()), app(state_two, test_dist())];
+        let mut jobs = tokio::task::JoinSet::new();
+        for request_number in 0..100 {
+            let app = apps[request_number % apps.len()].clone();
+            jobs.spawn(async move {
+                app.oneshot(
+                    Request::builder()
+                        .uri("/api/reports/not-a-valid-id")
+                        .header("x-forwarded-for", "198.51.100.82")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+            });
+        }
+        let mut normal = 0;
+        let mut limited = 0;
+        while let Some(response) = jobs.join_next().await {
+            let response = response.unwrap();
+            match response.status() {
+                StatusCode::NOT_FOUND => normal += 1,
+                StatusCode::TOO_MANY_REQUESTS => {
+                    assert_eq!(response.headers().get(header::RETRY_AFTER).unwrap(), "1");
+                    limited += 1;
+                }
+                status => panic!("unexpected burst response: {status}"),
+            }
+        }
+        assert_eq!(normal, 40);
+        assert_eq!(limited, 60);
+
+        tokio::time::sleep(Duration::from_millis(1_050)).await;
+        let recovered = apps[0]
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/reports/not-a-valid-id")
+                    .header("x-forwarded-for", "198.51.100.82")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(recovered.status(), StatusCode::NOT_FOUND);
+
+        db_one.close().await;
+        db_two.close().await;
+        std::fs::remove_file(db_path).unwrap();
     }
 
     #[tokio::test]
