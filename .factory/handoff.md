@@ -5,6 +5,8 @@
 - Repair work order: `screenreader-task-audit-repair-2`
 - Verifier report: commit `07c10854d9a1f4654067e0e9b1dc6437a8b59594`
 - Failed candidate: `e74605ff3597045cb66fa39e5daf231336bdd831`
+- Repaired candidate: `923255746368a84593221345731f7c3178e25417`
+- Live revision: `sf-screenreader-task-audit--0000005`
 
 The release-blocking live rate-limit finding is repaired. The earlier direct-route, claim-coverage, and cache-policy repairs remain covered and passing.
 
@@ -37,20 +39,17 @@ The failed candidate kept request history in a process-local `DashMap`, while th
 - Release-server HTML and the service worker use `Cache-Control: no-cache`; hashed assets use `public, max-age=31536000, immutable`. CSP, `nosniff`, referrer policy, and permissions policy were present.
 - The complete 22-test Playwright suite passed against the Rust release server on desktop and 390 px mobile. It covers one `h1`/`main`, no console errors, keyboard route focus, form recovery, same-origin privacy, demo isolation/reset, offline update/reload, reduced motion, and Axe serious/critical scans in light and dark treatments.
 - A release-server burst returned limited responses and a follow-up `429` with `Retry-After: 1` plus the documented JSON error. No slow-query warning was emitted after WAL tuning.
-- Current release-binary Lighthouse mobile: 99 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 1.87 s; CLS 0; total transfer 194,884 bytes. Raw evidence: `.factory/lighthouse.json`.
+- Current live Lighthouse mobile: 100 performance, 100 accessibility, 100 best practices, 100 SEO; LCP 1.1 s; CLS 0; total transfer 44 KiB. Raw evidence: `.factory/lighthouse.json`.
 - `git diff --check`: passed.
 
-## Live deployment evidence — 2026-08-29 UTC
+## Build and live verification — 2026-08-29 UTC
 
-- Repair candidate: `923255746368a84593221345731f7c3178e25417`, pushed to `origin/main` before deployment.
-- ACR build `chun` completed successfully from the `.git`-excluded source context. Image: `sociobotregistry.azurecr.io/sf-screenreader-task-audit:923255746368`; digest: `sha256:6e81db8926e3858a0a53faf7cfe1fe076b4332b67a5f601068916a89cdb1f759`.
-- Container App revision `sf-screenreader-task-audit--0000004` is healthy with 100% traffic, `minReplicas: 1`, and `maxReplicas: 1`.
-- `GET https://screenreader-task-audit.sociobot.in/health` returned `{"status":"ok","build_sha":"923255746368a84593221345731f7c3178e25417"}`.
-- Live direct loads returned 200 for `/`, `/demo`, `/audit`, `/privacy`, `/terms`, `/report`, `/demo/report`, `/share/<id>`, `/robots.txt`, and `/sitemap.xml`; an unknown route returned 404.
-- Live response policy matched the release server: HTML `no-cache`, hashed assets one-year immutable, and CSP, `nosniff`, referrer policy, and permissions policy present.
-- Exact fixed-client acceptance bursts to the harmless missing-report route returned: 50 sequential = 40 × 404 + 10 × 429; 100 concurrent = 40 × 404 + 60 × 429; 400 concurrent = 40 × 404 + 360 × 429. The sampled 429 included `Retry-After: 1` and the documented JSON body. The client returned to 404 after one idle second.
-- `PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e`: all 22 desktop and 390 px mobile runs passed live, including every claim, Axe, keyboard, privacy, demo reset, and offline/update coverage.
-- Factory `verify-url.sh` passed: HTTPS 200, 587 ms load, no console errors, title and `lang`, one `h1`, one `main`, no missing image alt text, and no unlabeled buttons.
+- Azure Container Registry build `chup` built the `.git`-excluded source archive successfully with the root Dockerfile. Image digest: `sha256:aba23a1a4da9a0b422d06de98a908ea0c5f14fb75b2a78cb7e4b2306eaeb08d1`.
+- Container App revision `sf-screenreader-task-audit--0000005` serves that immutable digest with 100% traffic, `minReplicas: 1`, and `maxReplicas: 1`. Live `/health` returns the full repaired candidate SHA.
+- The verifier's exact fixed-client patterns now enforce one allowance: 50 sequential requests returned 40 × 404 and 10 × 429; 100 concurrent returned 40 × 404 and 60 × 429; 400 requests at concurrency 100 returned 40 × 404 and 360 × 429. Every limited response included `Retry-After: 1`. An ordinary request after one idle second returned 404.
+- The complete 22-test Playwright suite passed unchanged against the live HTTPS URL on desktop and 390 × 844 mobile. This includes every browser claim, offline reload/update, privacy request capture, demo isolation/reset, keyboard focus, reduced motion, legal routes, console monitoring, and Axe scans.
+- The factory URL verifier passed live `/demo`: title `Demo — Screenreader Task Audit`, `lang="en"`, one `h1`, a `main` landmark, zero images missing alt text, zero unlabeled buttons, and no console errors.
+- Direct live checks returned 200 for `/`, `/demo`, `/audit`, `/privacy`, `/terms`, `/report`, `/demo/report`, `/share/<id>`, `/robots.txt`, and `/sitemap.xml`; an unknown route returned 404. HTML uses `no-cache`; fingerprinted assets use `public, max-age=31536000, immutable`; CSP, `nosniff`, referrer policy, and permissions policy are present.
 
 ## Run and verify
 
