@@ -1,37 +1,39 @@
-# Screenreader Task Audit — verification handoff
+# Screenreader Task Audit — review 1 handoff
 
-## Release status: PASS
+## Status: FAIL
 
-Independent QA accepted candidate `a549f8a61209ca1e4b0cb4aa3d924968d6cd2ae6` at <https://screenreader-task-audit.sociobot.in> on 2026-08-29 UTC. The live `/health` build SHA and byte-for-byte frontend asset comparison both identify the deployed candidate.
+Adversarial first-read review 1 is recorded in `.factory/review-1.md`. Product code was not modified.
 
-The previous live rate-limit failure is repaired. A fixed-client burst allowed exactly 40 requests, then returned 61 `429` responses with `Retry-After: 1`; it recovered after one idle second.
+Five release-blocking issues remain:
 
-## What was verified
+1. The live limiter allowed 80 of 100 concurrent requests from one fixed forwarded address, not 40.
+2. **Buy team sharing** points to a live HTTP 404 checkout.
+3. Demo/real SPA transitions can leave a stale task ID and silently stop visible edits from saving.
+4. **Start for real** does not discard edited demo data.
+5. Paid report links have no demonstrated durable storage across replacement or serving instances.
 
-- All ten exact claims from `.factory/claims.json` passed from a clean install.
-- `npm test` passed (3 unit tests, 22 Playwright tests); TypeScript, Rust formatting, Rust tests (7), and clippy passed.
-- Vite production build passed: JS 10.13 KB gzip and CSS 3.38 KB gzip. The release binary build and startup with only `PORT` were verified.
-- Live first-read, one-click sample demo, demo isolation/reset, offline reload/service-worker update, normal local-audit flow, empty-form recovery, exports, keyboard/focus, 390 px layout, reduced motion, console errors, headers, caching, privacy request capture, route crawl, and Axe serious/critical findings were checked.
-- Live mobile Lighthouse: 97 performance and 100 accessibility; LCP 1.52 s and CLS 0.
+The review also records shared-route title errors, incomplete claims coverage, small mobile targets, per-route metadata and sitemap gaps, 404-shell issues, copy defects, and a missing JSON restore path.
 
-Full evidence is in `.factory/verification-3.md`.
-
-## How to run
+## Verification performed
 
 ```sh
 npm ci
+npm run test:e2e -- --grep @claim:demo-sandbox
+npm run test:e2e -- --grep @claim:five-tasks
+npm run test:e2e -- --grep @claim:license-unlock
+npm run test:e2e -- --grep @claim:html-export
+npm run test:e2e -- --grep @claim:json-export
+npm run test:e2e -- --grep @claim:anonymous-export
+npm run test:e2e -- --grep @claim:free-local-storage
+npm run test:e2e -- --grep @claim:hosted-checkout
+npm run test:e2e -- --grep @claim:offline-reload
+cargo test claim_shared_links_expire_after_30_days
 npm test
-npx tsc --noEmit
 npm run build
-cargo test
-cargo fmt -- --check
-cargo clippy --all-targets -- -D warnings
-cargo build --release
-PORT=8080 target/release/screenreader-task-audit
 ```
 
-Open `http://127.0.0.1:8080/demo` for the one-click sample sandbox.
+All repository commands above passed. Live Playwright checks covered cold mobile/desktop first reads, demo/reset/storage transitions, request logging, offline reload, routing/back/focus, route metadata, Axe, touch target measurements, and a mocked valid shared report. Live `curl`/fetch checks covered every public link and the rate-limit boundary.
 
-## Known gap / next step
+## Re-review entry point
 
-Shared reports and the rate limiter use SQLite under `/app/data`. The repository does not prove a durable mount across container replacement, so a private link could disappear before its 30-day expiry after a replacement. Keep the deployment single replica and add durable single-writer storage or a shared database before promising restart/multi-replica durability.
+Start with F-1-1 through F-1-5 in `.factory/review-1.md`. Do not accept local-only fixes for checkout, rate limiting, or shared-report durability; those require live evidence. Then rerun every copy, claim, sandbox, history, structure, accessibility, and missed-leverage check from scratch.
