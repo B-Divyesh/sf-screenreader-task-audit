@@ -15,11 +15,17 @@ The service worker makes the demo available offline after its first visit.
 ## What Screenreader Task Audit includes
 
 - Setup asks for the tester’s consent before recording.
-- Five task sheets record expected steps, announcements, focus, blockers, and notes.
+- Five task sheets record the starting place, expected steps, announcements, focus, blockers, and notes.
 - Event traces record focus, actions, and announcements when a sequence matters.
 - Reports sort tasks by result and impact.
 - Accessible HTML and JSON exports are free.
 - JSON exports restore the setup, tasks, and event traces after you confirm.
+
+## Team sharing
+
+Team sharing costs $39 once. It creates a private report link for a teammate who does not need an account. Checkout, refunds, and license verification use Sociobot and Dodo. The product never handles card details.
+
+Choose **Buy team sharing** on the landing page. After checkout, the return token is stored only in this browser and removed from the URL. **Have a license? Paste it** restores a purchase on another device. The report sends its content to the server only after a verified license holder chooses **Create private link**.
 
 Free audits stay in browser storage under `sra:audit:v1`. The local audit does not send task content to a server. The site has no analytics, ads, third-party fonts, or runtime scripts.
 
@@ -62,7 +68,7 @@ Open <http://localhost:8080/?demo=1> and check <http://localhost:8080/health>.
 
 ## Backend
 
-The axum server serves `dist/` and exposes `GET /health`. Reserved report API routes validate a report body before storage. They allow no more than five tasks and a 200 KB encoded body.
+The axum server serves `dist/` and exposes `GET /health`. A verified team-sharing license is required to create a private report link. Report API routes validate a report body before storage. They allow no more than five tasks and a 200 KB encoded body.
 
 API routes accept a burst of 40 requests from the first `X-Forwarded-For` address. One idle second resets the allowance. Limited responses return `429` and `Retry-After: 1`. The SQLite-backed report and limiter store are local to the container, so the versioned [container scale configuration](.factory/container-scale.json) requires exactly one replica.
 
@@ -81,7 +87,7 @@ Read `/privacy` and `/terms` in the app. Implementation details live in [.factor
 
 ## Deploy
 
-The factory deploys the root `Dockerfile`. It builds the Vite frontend and Rust server in separate stages. The runtime listens on `PORT` as a non-root user. The deployment helper reads `.factory/container-scale.json`; keep this SQLite deployment at exactly one replica unless reports and rate-limit state move to a shared database.
+The factory deploys the root `Dockerfile`. It builds the Vite frontend and Rust server in separate stages. The runtime listens on `PORT` as a non-root user. Deployment must apply `.factory/container-scale.json`: keep this SQLite deployment at exactly one replica unless reports and rate-limit state move to a shared database.
 
 ## License
 

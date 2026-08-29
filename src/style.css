@@ -79,9 +79,9 @@ button:disabled { cursor:not-allowed;opacity:.55;transform:none;box-shadow:none;
 .price-sheet { background:var(--sheet);border:2px solid var(--ink);padding:24px;box-shadow:8px 8px 0 var(--yellow); }
 .price { font:700 2.4rem/1 Georgia,serif; }
 .site-footer { border-top:2px solid var(--ink); }
-.footer-inner { padding-block:32px;display:grid;grid-template-columns:1fr auto;gap:20px;align-items:start; }
+.footer-inner { padding-block:32px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:start; }
 .footer-links { display:flex;flex-wrap:wrap;gap:8px 22px; }
-.footer-meta { font-size:.88rem;color:var(--muted); }
+.footer-meta { font-size:.88rem;color:var(--muted);overflow-wrap:anywhere; }
 .narrow { max-width:760px; }
 .narrow h1 { font-size:clamp(2.5rem,7vw,4.5rem); }
 .narrow h2 { font-size:1.8rem;margin-top:48px; }

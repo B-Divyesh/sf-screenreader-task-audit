@@ -71,9 +71,16 @@ test('@claim:core-workflow records evidence, persists it, and shows it in the re
   await page.getByLabel('Focus movement').fill('Focus moved to the hidden menu.');
   await page.getByLabel('Blocker').fill('Menu has no accessible name.');
   await page.getByLabel('Other notes').fill('Reproduced twice.');
+  await page.getByRole('button', { name: 'Add trace event' }).click();
+  await page.getByLabel('Time').fill('11:08');
+  await page.getByLabel('Event type').selectOption('action');
+  await page.getByLabel('Control or area').fill('Export menu');
+  await page.getByLabel('What happened').fill('Pressed Enter and the hidden menu opened.');
+  await page.getByRole('button', { name: 'Record event' }).click();
   await page.getByRole('link', { name: 'Review report' }).click();
   await expect(page.getByRole('heading', { name: 'Export invoices' })).toBeVisible();
-  await expect(page.getByText('Menu has no accessible name.')).toBeVisible();
+  const report = page.locator('.report-task').first();
+  for (const value of ['Billing', 'Open export and choose CSV.', 'Export button announced.', 'Focus moved to the hidden menu.', 'Menu has no accessible name.', 'Reproduced twice.', 'Export menu', 'Pressed Enter and the hidden menu opened.']) await expect(report).toContainText(value);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Export invoices' })).toBeVisible();
 });
@@ -109,10 +116,33 @@ test('@claim:report-priority orders tasks by result and impact everywhere', asyn
 });
 
 test('@claim:html-export exports an accessible standalone report', async ({ page }) => {
-  await page.goto('/demo/report'); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export accessible HTML' }).click(); const stream = await (await download).createReadStream(); let html = ''; for await (const chunk of stream!) html += chunk.toString(); expect(html).toContain('<html lang="en">'); expect(html).toContain('Change the report date range');
+  await page.goto('/demo/report'); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export accessible HTML' }).click(); const stream = await (await download).createReadStream(); let html = ''; for await (const chunk of stream!) html += chunk.toString(); expect(html).toContain('<html lang="en">'); expect(html).toContain('<main>'); for (const value of ['Change the report date range', 'Overview dashboard', 'Sighted colleague had to change the range.', 'Date range button', 'Pressed Enter.', 'Focus returned to page navigation.']) expect(html).toContain(value);
 });
 test('@claim:json-export exports five tasks as JSON', async ({ page }) => { await page.goto('/demo/report'); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click(); const stream = await (await download).createReadStream(); let json = ''; for await (const chunk of stream!) json += chunk.toString(); const exported = JSON.parse(json); expect(exported.schema).toBe('screenreader-task-audit/v1'); expect(exported.tasks).toHaveLength(5); });
 test('@claim:anonymous-export removes product and environment names from JSON', async ({ page }) => { await page.goto('/demo/report'); await page.getByLabel('Remove product and environment names').check(); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click(); const stream = await (await download).createReadStream(); let json = ''; for await (const chunk of stream!) json += chunk.toString(); expect(json).not.toContain('Northstar Metrics'); expect(JSON.parse(json)).toMatchObject({ product: 'Product withheld', environment: 'Withheld' }); });
+test('@claim:team-sharing restores a Sociobot license and creates a private report link', async ({ page }) => {
+  const license = 'team-license-fixture';
+  await page.route(`https://api.sociobot.in/api/v1/products/screenreader-task-audit/verify?license=${license}`, route => route.fulfill({ contentType: 'application/json', body: '{"valid":true}' }));
+  await page.route('**/api/reports', async route => {
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().headers().authorization).toBe(`Bearer ${license}`);
+    expect(JSON.parse(route.request().postData() || '{}')).toMatchObject({ schema: 'screenreader-task-audit/v1', tasks: expect.any(Array) });
+    await route.fulfill({ status: 201, contentType: 'application/json', body: '{"id":"0123456789abcdef0123456789abcdef","expires_at":"2026-09-28T09:00:00Z"}' });
+  });
+  await page.goto(`/report?license=${license}`);
+  await expect(page).toHaveURL('/report');
+  expect(await page.evaluate(() => localStorage.getItem('sb_license:screenreader-task-audit'))).toBe(license);
+  await expect(page.getByRole('button', { name: 'Create private link' })).toBeVisible();
+  await page.getByRole('button', { name: 'Create private link' }).click();
+  await expect(page.getByRole('link', { name: 'Open the private report' })).toHaveAttribute('href', /\/share\/0123456789abcdef0123456789abcdef$/);
+  await page.goto('/');
+  await expect(page.getByText('$39 once')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Buy team sharing (external)' })).toHaveAttribute('href', 'https://api.sociobot.in/api/v1/products/screenreader-task-audit/checkout');
+  await page.goto('/privacy');
+  await expect(page.getByText('Creating a private link sends the reviewed report to this service.')).toBeVisible();
+  await page.goto('/terms');
+  await expect(page.getByText('Team sharing is a one-time $39 purchase.')).toBeVisible();
+});
 
 test('@claim:import-json restores every editable audit field only after confirmation', async ({ page, browser }: { page: Page; browser: Browser }) => {
   await page.goto('/audit');
@@ -283,3 +313,36 @@ test('shared report metadata distinguishes loaded and missing reports', async ({
 });
 test('all public routes have no serious accessibility findings or console errors', async ({ page }) => { const errors: string[] = []; page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); }); for (const path of ['/', '/?demo=1', '/demo/report', '/privacy', '/terms']) { await page.goto(path); const result = await new AxeBuilder({ page }).analyze(); expect(result.violations.filter(issue => ['serious', 'critical'].includes(issue.impact || ''))).toEqual([]); } expect(errors).toEqual([]); await page.goto('/missing'); const result = await new AxeBuilder({ page }).analyze(); expect(result.violations.filter(issue => ['serious', 'critical'].includes(issue.impact || ''))).toEqual([]); });
 test('keyboard navigation moves focus to each new heading', async ({ page }) => { await page.goto('/'); await page.keyboard.press('Tab'); await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused(); await page.keyboard.press('Enter'); await expect(page.locator('main')).toBeFocused(); await page.getByRole('link', { name: 'Demo', exact: true }).press('Enter'); await expect(page.locator('h1')).toBeFocused(); });
+test('keyboard task changes and trace actions retain focus and announce the new state', async ({ page }) => {
+  await page.goto('/demo');
+  const secondTask = page.locator('[data-task]').nth(1);
+  await secondTask.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#task-heading')).toBeFocused();
+  await expect(page.locator('#save-status')).toContainText('Editing task Find the top-selling product.');
+  const traceButton = page.getByRole('button', { name: 'Add trace event' });
+  await traceButton.focus();
+  await page.keyboard.press('Space');
+  await expect(page.getByLabel('Time')).toBeFocused();
+  await expect(page.locator('#save-status')).toContainText('Trace event form opened.');
+});
+test('all public pages reflow at 200% text size on a 390px screen', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const path of ['/', '/demo', '/demo/report', '/privacy', '/terms']) {
+    await page.goto(path);
+    await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  }
+});
+test('public routes do not raise page errors', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  for (const path of ['/', '/demo', '/demo/report', '/privacy', '/terms']) await page.goto(path);
+  expect(errors).toEqual([]);
+});
+test('the demo has no serious accessibility findings in dark mode', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/demo');
+  const result = await new AxeBuilder({ page }).analyze();
+  expect(result.violations.filter(issue => ['serious', 'critical'].includes(issue.impact || ''))).toEqual([]);
+});

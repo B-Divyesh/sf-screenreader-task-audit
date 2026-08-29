@@ -52,4 +52,8 @@ describe('audit report logic', () => {
     expect(escapeHtml('<script>')).toBe('&lt;script&gt;');
     expect(reportHtml(audit, false)).not.toContain('<img src=x');
   });
+  it('keeps every reproduction field in the standalone HTML report', () => {
+    const html = reportHtml(demoAudit(), false);
+    for (const value of ['Overview dashboard', 'Sighted colleague had to change the range.', 'Date range button', 'Pressed Enter.', 'Focus returned to page navigation.']) expect(html).toContain(value);
+  });
 });

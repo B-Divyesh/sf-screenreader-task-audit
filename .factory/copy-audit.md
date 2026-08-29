@@ -25,6 +25,11 @@ The headline has four words. The audience sentence has 11 words. The first actio
 | It does not collect passwords or analytics data from the product you test. | 13 | Tested privacy boundary |
 | It does not certify accessibility or provide legal advice. | 9 | Tested scope |
 | Export JSON, then restore the same editable audit. | 8 | Tested restore path |
+| Create a private link for a teammate. | 7 | Tested licensed sharing result |
+| They do not need an account. | 6 | Tested shared-link reader path |
+| Sociobot and Dodo handle checkout and refunds. | 7 | Hosted payment boundary copy |
+| HTML and JSON exports stay free. | 6 | Tested free export path |
+| Accessibility features stay free. | 4 | Product boundary |
 
 ## Terminology
 
@@ -37,5 +42,7 @@ The headline has four words. The audience sentence has 11 words. The first actio
 | Ordered output | report |
 | Sequence details | event trace |
 | Assistive software | screen reader |
+| Paid collaboration URL | private link |
+| Purchase credential | team-sharing license |
 
 Catalog description: “Record screen-reader task evidence and rank blockers for repair.” It starts with a verb and is 64 characters.
