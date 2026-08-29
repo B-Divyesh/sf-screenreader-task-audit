@@ -77,9 +77,12 @@ After deployment, verify that public boundary with:
 ```sh
 npm run verify:live-rate-limit
 EXPECTED_BUILD_SHA=$(git rev-parse HEAD) npm run verify:live-deployment
+npm run verify:live-checkout
 ```
 
 The check sends concurrent harmless bursts for one forwarded address. The 41-request burst must return 40 `404` responses and one `429` with `Retry-After: 1`. A 100-request burst must return 40 `404` responses and 60 `429` responses, then recover after one idle second.
+
+The checkout check verifies the public USD 39.00 catalog entry and that an unpaid request redirects to a hosted Dodo session. It does not submit payment details.
 
 ## Privacy and legal pages
 

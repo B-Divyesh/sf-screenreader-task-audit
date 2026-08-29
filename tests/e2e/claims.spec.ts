@@ -142,6 +142,37 @@ test('@claim:team-sharing restores a Sociobot license and creates a private repo
   await expect(page.getByText('Creating a private link sends the reviewed report to this service.')).toBeVisible();
   await page.goto('/terms');
   await expect(page.getByText('Team sharing is a one-time $39 purchase.')).toBeVisible();
+  const catalog = await page.request.get('https://api.sociobot.in/api/v1/products');
+  expect(catalog.ok()).toBe(true);
+  const products = await catalog.json() as { data: { slug: string; price_minor: number; currency: string; checkout_url: string }[] };
+  expect(products.data).toContainEqual(expect.objectContaining({
+    slug: 'screenreader-task-audit',
+    price_minor: 3900,
+    currency: 'USD',
+    checkout_url: 'https://api.sociobot.in/api/v1/products/screenreader-task-audit/checkout'
+  }));
+  const checkout = await page.request.get('https://api.sociobot.in/api/v1/products/screenreader-task-audit/checkout', { maxRedirects: 0 });
+  expect(checkout.status()).toBe(303);
+  expect(checkout.headers().location).toMatch(/^https:\/\/checkout\.dodopayments\.com\/session\/cks_[A-Za-z0-9]+$/);
+});
+
+test('@claim:license-restore-feedback announces invalid and valid landing license results without retaining an invalid token', async ({ page }) => {
+  await page.route('https://api.sociobot.in/api/v1/products/screenreader-task-audit/verify?license=qa-invalid-token', route => route.fulfill({ contentType: 'application/json', body: '{"valid":false,"reason":"invalid"}' }));
+  await page.route('https://api.sociobot.in/api/v1/products/screenreader-task-audit/verify?license=qa-valid-token', route => route.fulfill({ contentType: 'application/json', body: '{"valid":true,"reason":"ok"}' }));
+  await page.goto('/');
+  const input = page.getByLabel('Paste your team-sharing license');
+  await input.fill('qa-invalid-token');
+  await page.getByRole('button', { name: 'Verify license' }).click();
+  const feedback = page.locator('#license-status');
+  await expect(feedback).toHaveAttribute('role', 'status');
+  await expect(feedback).toHaveAttribute('aria-live', 'polite');
+  await expect(feedback).toHaveText('This team-sharing license is not active. Check the token or choose Buy team sharing. Free exports still work.');
+  await expect(input).toBeFocused();
+  expect(await page.evaluate(() => localStorage.getItem('sb_license:screenreader-task-audit'))).toBeNull();
+  await input.fill('qa-valid-token');
+  await page.getByRole('button', { name: 'Verify license' }).click();
+  await expect(feedback).toHaveText('Team-sharing license verified. You can create a private link.');
+  expect(await page.evaluate(() => localStorage.getItem('sb_license:screenreader-task-audit'))).toBe('qa-valid-token');
 });
 
 test('@claim:import-json restores every editable audit field only after confirmation', async ({ page, browser }: { page: Page; browser: Browser }) => {
