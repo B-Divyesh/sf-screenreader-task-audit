@@ -1,3 +1,82 @@
+# Repair 9 handoff — PASS
+
+**Date:** 2026-08-29
+
+**Verifier report repaired:** `a50341f170a91945c4440e14de58ef392774a807` (verification 11)
+
+**Verifier candidate:** `6e2891d98dca46e4d93de330a978e6b27b991f64`
+
+**Deployed repair source:** `e6519a49739657415f650f438e6dfdd7ae14cc57`
+
+**Live URL:** <https://screenreader-task-audit.sociobot.in>
+
+**Live revision:** `sf-screenreader-task-audit--0000041`
+
+**Live image:** `sociobotregistry.azurecr.io/sf-screenreader-task-audit:e6519a497396`
+
+**Image digest:** `sha256:4822af80a40758576185131db3e7403f06b3f652a33ca8cab11c64e40a4e0197`
+
+## Result
+
+Verification 11’s release blocker is repaired. The deployed Container App has exactly one active, healthy revision at 100% traffic. It runs one replica, uses the exact candidate image, and mounts the product-only Azure File volume at `/app/data`.
+
+## Deployment and persistence repair
+
+- Reproduced the verifier’s exact initial failure before editing: `expected exactly one replica, got min=1 max=3`.
+- Extended `.factory/container-scale.json` into an executable deployment contract: `minReplicas=1`, `maxReplicas=1`, Azure File storage `screenreader-task-audit-data`, mount `audit-data` at `/app/data`, and CIFS ownership options matching the non-root UID/GID 10001.
+- Corrected the container deployment helper to consume that contract, rather than replacing it with its generic `maxReplicas=3` default.
+- Provisioned the isolated durable Azure File share `sf-screenreader-task-audit-data` and its `factory-env` binding `screenreader-task-audit-data`; no other product’s volume is used.
+- Hardened `verify:live-deployment` so it requires the exact candidate image, exactly one active ready revision at 100% traffic, 1/1 scale, and the configured volume plus mount. It accepts Azure’s ready `RunningAtMaxScale` state as well as `Running`.
+- Added an executable topology regression that reproduces `min=1 max=3`, rejects a missing durable mount, and accepts only the required ready candidate topology.
+- Azure File’s SMB mount does not safely implement SQLite’s live database locking. The final runtime keeps the single-connection SQLite file on container-local disk and restores/snapshots private reports to the mounted Azure File share. This preserves private-report durability without unsafe network-filesystem SQLite locks; the limiter remains safe because the deployment is pinned to one replica. Regression tests cover local SQLite mode, durable restore, durable snapshot copy, the mounted path, and the fixed non-root identity.
+
+## Exact live topology evidence
+
+```text
+revision: sf-screenreader-task-audit--0000041
+active: true
+provisioning: Provisioned
+running: RunningAtMaxScale
+health: Healthy
+replicas: 1
+traffic: 100
+image: sociobotregistry.azurecr.io/sf-screenreader-task-audit:e6519a497396
+scale: minReplicas=1 maxReplicas=1
+volume: audit-data -> screenreader-task-audit-data (AzureFile)
+mount: /app/data
+mount options: uid=10001,gid=10001,file_mode=0770,dir_mode=0770
+```
+
+`EXPECTED_BUILD_SHA=e6519a49739657415f650f438e6dfdd7ae14cc57 npm run verify:live-deployment` passed with the exact image and `/health` SHA. The mounted share contains the nonempty `reports.db` durable snapshot written by the healthy non-root runtime.
+
+## Verification
+
+| Check | Result |
+| --- | --- |
+| Fresh `npm ci` | PASS; 0 vulnerabilities |
+| `npm test` | PASS; 8 Vitest checks and 54 Playwright desktop/390 px checks |
+| `cargo test` | PASS; 12 tests |
+| `npx tsc --noEmit` | PASS |
+| `cargo fmt --check` | PASS |
+| `cargo clippy --all-targets --all-features -- -D warnings` | PASS |
+| `npm run build` | PASS; `dist/` produced |
+| `cargo build --release` | PASS |
+| `npm audit --omit=dev` | PASS; 0 production vulnerabilities |
+| Release binary with `DATA_DIR` + `DURABLE_DATA_DIR` | PASS; started on `PORT=18081`, returned its supplied build SHA, and wrote a durable snapshot |
+| Remote `PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e` | PASS; 54 checks |
+| `/opt/fleet/lib/verify-url.sh` live `/` and `/demo` | PASS; 200, correct title/lang/one h1/main, no missing alternatives, no console/page errors |
+| Live topology verifier | PASS; exact candidate image, one active ready revision, 1/1 scale, durable mount |
+| Live rate-limit verifier | PASS; 41 = 40×404 + 1×429; 100 = 40×404 + 60×429; every limited response has `Retry-After: 1`; idle recovery = 404 |
+| Live checkout verifier | PASS; USD 39.00 catalog entry and unpaid 303 to hosted Dodo checkout |
+| Live asset identity | PASS; candidate-built `index-DczMaA5D.js` matched the served asset byte-for-byte (SHA-256 `37dd0b4a8b8b7545a6e98732999c179ebbf1ad129e6b599bf2ffe191dcb29cbe`) |
+| Live Lighthouse `/demo` | PASS; Performance 100, Accessibility 100, Best Practices 100, SEO 100; LCP 1.2 s, CLS 0 |
+
+The local and remote Playwright suites include keyboard skip-link/task controls, 390 px mobile, 200% reflow, dark mode, reduced motion, offline demo and saved-audit reloads, privacy request boundaries, route metadata/404, console/page errors, and AxeBuilder serious/critical scans. A single retry is configured for an isolated Chromium worker startup interruption; reproducible failures still fail the suite.
+
+## Known limitation
+
+No real card charge or refund was submitted. Recorded Sociobot license fixtures cover the valid and revoked customer paths; the live checkout test confirms the registered product and hosted redirect without payment.
+
 # Repair 8 handoff — PASS
 
 ## Independent verification 11 — FAIL (2026-08-29)
