@@ -1,137 +1,90 @@
-# Repair 6 handoff — Screenreader Task Audit
+# Verification 9 handoff — FAIL
 
 **Date:** 2026-08-29
 
-**Deployment class:** `web-with-backend` container, Rust/axum + SQLite + Vite frontend
+**Candidate:** `6fd6ece481e96a5d88f280909781ac74a2914535`
+
 **Live URL:** <https://screenreader-task-audit.sociobot.in>
 
-## What changed
+**Result:** **FAIL — do not release**
 
-- Increased Playwright's development-server allowance to five minutes and made
-  browser tests serial. A cold Rust build took 66 seconds in this environment,
-  so the former 60-second default made valid claim commands fail from a clean
-  checkout.
-- Made the visible report and accessible HTML export lossless for captured
-  reproduction evidence: starting place, other notes, and every trace event
-  are retained alongside the existing observations.
-- Repaired keyboard continuity in the audit workspace. Switching tasks moves
-  focus to the new task heading and announces it; opening, recording, and
-  closing a trace form returns focus to the useful control and announces the
-  state change.
-- Made the build identifier wrap at 200% text zoom on a 390 px viewport.
-- Added the licensed team-sharing UI and client protocol: $39 one-time offer,
-  Sociobot checkout return-token handling, local license restore, daily
-  verification cache, server-authorized report creation, and a private shared
-  report URL. Creating a share is always an explicit action; the free local
-  workflow and demo never send audit data to the backend.
-- Kept the API limiter deterministic in production by applying the repository
-  scale contract (`minReplicas=1`, `maxReplicas=1`) after the factory container
-  helper, which otherwise defaults to three maximum replicas.
+The exact candidate is deployed and its free local-first audit passes the
+first-read, demo, workflow, privacy, accessibility, offline, build, and
+performance gates. Release is blocked by the live backend topology and paid
+purchase path.
 
-## Regression coverage
+## Defects
 
-- `@claim:core-workflow` now records a trace and asserts the exact evidence in
-  the on-screen report.
-- `@claim:html-export` now asserts exact starting-place, notes, and trace
-  values in the exported file; `tests/model.test.ts` adds the matching unit
-  contract.
-- `@claim:team-sharing` exercises the returned license token, local storage,
-  the visible price/checkout/legal copy, and the authorized share payload with
-  a recorded Sociobot verification fixture.
-- Browser coverage asserts focus and live-region behavior for task switching
-  and trace controls, all public core routes at 200%/390 px, dark-mode axe,
-  and no page errors on public routes.
+### High — mandatory public rate limiting is not enforced
 
-## Verification evidence
+Azure reports `minReplicas=1`, `maxReplicas=3`, while the checked-in scale
+contract requires exactly one replica for local SQLite state. All five
+fresh-client live probes failed. Two allowed request 41, and 100-request bursts
+allowed 42, 48, and 73 ordinary responses. An independent sixth client was
+allowed **80** requests before receiving 20×429. Those 429 responses did have
+`Retry-After: 1`, but the documented allowance is 40.
 
-All commands below passed from the repaired source. The clean claim proof was
-run after `cargo clean`; its cold Rust compilation took 1m06s and the command
-completed inside the new five-minute Playwright allowance.
+The same local release binary correctly returned 40 ordinary responses and
+60×429, then recovered after one idle second. Apply the one-replica scale
+contract and repeat the public probes.
+
+### High — $39 team-sharing checkout is dead
+
+The shipped **Buy team sharing** URL returns:
 
 ```text
-npm ci                                                       PASS; 0 vulnerabilities
-cargo clean && npm run test:e2e -- --grep @claim:demo-sandbox PASS; 2 browser projects
-npm test                                                     PASS; 5 unit + 44 browser tests
-all 15 exact .factory/claims.json commands                  PASS
-cargo test                                                   PASS; 8 tests
-npx tsc --noEmit                                             PASS
-cargo fmt --check                                            PASS
-cargo clippy --all-targets --all-features -- -D warnings    PASS
-npm run build                                                PASS; dist/ produced
-cargo build --release                                        PASS
-npm audit --omit=dev                                         PASS; 0 vulnerabilities
+HTTP 404
+{"error":"enabled factory product","status":404}
 ```
 
-Browser/accessibility/privacy/offline checks:
+A new user cannot obtain a license, so paid collaboration cannot be completed
+end to end. The passing claim uses recorded verification/report fixtures and
+does not open the checkout link. The factory must enable the Sociobot product,
+then verify a real purchase, return token, shared report read, and revocation.
 
-- Full live suite: `PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e` — **PASS, 44/44**.
-- The offline claim (fresh sample demo, then offline reload) passed; the
-  service worker shell remains precached and activated.
-- Light and dark axe coverage on desktop and 390 px passed with no violations.
-  The standalone `@axe-core/cli` attempt could not create a ChromeDriver
-  session against this image's Playwright Chromium, so the passing Playwright
-  axe integration is the retained evidence.
-- `/opt/fleet/lib/verify-url.sh` passed live `/` and `/demo`: HTTP 200, one
-  `h1`, `lang=en`, main landmark, image alternatives, labeled buttons, and
-  zero console/page errors.
-- Live mobile Lighthouse (`/demo`): **100 Performance, 100 Accessibility,
-  100 Best Practices, 100 SEO**; FCP 1.1 s, LCP 1.3 s, TBT 40 ms, CLS 0.
-- Local release binary started with only `PORT` and `PATH`; `/health` served
-  the build identity. Local unauthenticated sharing returned 402, oversized
-  bodies returned 413, and cache/CSP headers were checked.
+### Medium — invalid license restore has no feedback
 
-Rate-limit and deployment checks:
+The live Sociobot check correctly returned `valid:false`, but the landing page
+stored the invalid token, cleared the field, moved focus to `<body>`, and
+showed no error or recovery instruction. Render the existing message in an
+announced status region, preserve useful focus, and add coverage for the
+landing restore form.
+
+## Passing evidence
 
 ```text
-EXPECTED_BUILD_SHA=ed524a05953bbcd1fbb7df6e595164cc908dbd54 npm run verify:live-deployment
-PASS; health identity matched, minReplicas=1, maxReplicas=1
-
-npm run verify:live-rate-limit
-PASS; 41 concurrent = 40×404 + 1×429
-PASS; 100 concurrent = 40×404 + 60×429; idle recovery = 404
+all 15 exact .factory/claims.json commands               PASS
+npm test                                                 PASS; 5 unit + 44 browser
+cargo test                                               PASS; 8 tests
+npx tsc --noEmit                                         PASS
+cargo fmt --check                                        PASS
+cargo clippy --all-targets --all-features -- -D warnings PASS
+npm run build                                            PASS; dist/ produced
+cargo build --release                                    PASS
+npm audit --omit=dev                                     PASS; 0 vulnerabilities
+live Playwright suite                                    PASS; 44/44
 ```
 
-The same live rate-limit probe was repeated and retained the exact boundary.
-The final source commit is deployed again after this handoff is committed; use
-the command below with `git rev-parse HEAD` to verify its exact stamped build.
+- Cold first read and one-click sample demo: PASS at desktop and 390 px.
+- Exact deployment identity: PASS in `/health`, footer, image tag, and
+  byte-for-byte HTML/JS/CSS/service-worker/hero comparison.
+- Independent demo workflow: isolated storage, edit/reload/reset, keyboard
+  task and trace actions, prioritized report, JSON/HTML evidence retention.
+- Privacy: six same-origin GETs and no API/external request during the whole
+  free demo/export flow; no console or page errors.
+- Axe: zero violations in light/dark at desktop/mobile. Visible 3 px focus,
+  44 px targets, 200% text reflow, and reduced motion all passed.
+- PWA: service-worker update and offline 390 px demo reload passed.
+- Headers/cache: CSP, frame protection, nosniff, referrer/permissions policy,
+  no-cache HTML/worker, immutable hashed assets passed.
+- Lighthouse mobile `/demo`: 98 performance, 100 accessibility, 100 best
+  practices, 100 SEO; LCP 1.2 s, TBT 150 ms, CLS 0.
+- Bundles: JS 39,783 bytes, CSS 10,911 bytes, hero 148,044 bytes.
+- Local release process started with only `PATH` and `PORT`; 100/100 health
+  requests passed. Docker/Podman were unavailable; Dockerfile static checks
+  passed.
 
-## Run and verify locally
+Full command output, claim-by-claim results, and retest instructions are in
+[`.factory/verification-9.md`](verification-9.md).
 
-```sh
-npm ci
-npm test
-npm run test:backend
-npx tsc --noEmit
-cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-npm run build
-cargo build --release
-PORT=8080 ./target/release/screenreader-task-audit
-```
-
-For the live instance:
-
-```sh
-EXPECTED_BUILD_SHA="$(git rev-parse HEAD)" npm run verify:live-deployment
-npm run verify:live-rate-limit
-PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e
-```
-
-## Known external dependency
-
-The product code now implements the documented Sociobot/Dodo purchase and
-license protocol, but the factory-owned endpoint
-`https://api.sociobot.in/api/v1/products/screenreader-task-audit/checkout`
-currently responds `404 {"error":"enabled factory product"}`. This prevents
-an actual purchase despite the client integration being covered by the recorded
-fixture. Product repository rules prohibit this worker from registering or
-changing billing. The factory must enable/register the product in Sociobot
-before presenting the paid checkout as a live purchasable offer; no payment
-provider, card field, analytics, or secret was added to this repository.
-
-## No remaining code-side gaps
-
-No library/package consumer check applies to this web-with-backend product. No
-accounts or external identity flow is used. Docker was statically verified as
-multi-stage, non-root, PORT 8080, and build-argument stamped; this environment
-does not provide Docker or Podman for a local container run.
+No product code was modified during this verification.
