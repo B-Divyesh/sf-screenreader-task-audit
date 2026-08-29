@@ -38,7 +38,7 @@ function revisionFixture(): Record<string, unknown>[] {
     properties: {
       active: true,
       provisioningState: 'Provisioned',
-      runningState: 'Running',
+      runningState: 'RunningAtMaxScale',
       healthState: 'Healthy',
       replicas: 1,
       trafficWeight: 100,

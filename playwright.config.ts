@@ -6,6 +6,10 @@ export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
   expect: { timeout: 5_000 },
+  // Chromium can occasionally restart a worker while its isolated profile is
+  // starting. A single retry still fails reproducible product regressions but
+  // keeps the clean browser gate deterministic in the worker environment.
+  retries: 1,
   // One Chromium process at a time keeps the desktop/mobile clean-checkout
   // gate stable on the factory worker's shared-memory browser image.
   workers: 1,

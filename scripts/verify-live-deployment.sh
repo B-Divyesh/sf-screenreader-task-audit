@@ -89,7 +89,7 @@ not_ready = {
 }
 if not (
     not_ready["provisioningState"] == "Provisioned"
-    and not_ready["runningState"] == "Running"
+    and not_ready["runningState"] in {"Running", "RunningAtMaxScale"}
     and not_ready["healthState"] == "Healthy"
     and isinstance(not_ready["replicas"], int)
     and not_ready["replicas"] >= 1
