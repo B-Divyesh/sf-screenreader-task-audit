@@ -63,7 +63,7 @@ export const demoAudit = (): Audit => ({
       ]
     },
     {
-      id: 'demo-2', title: 'Find top-selling product', goal: 'Read the leading product and its revenue', start: 'Products dashboard',
+      id: 'demo-2', title: 'Find the top-selling product', goal: 'Read the leading product and its revenue', start: 'Products dashboard',
       outcome: 'partial', severity: 'high', expected: 'Read the first row in the products table.',
       announced: 'Product names were read. Revenue cells were announced as “blank”.', focus: 'Table cells followed a useful row order.',
       blocker: 'Revenue values were drawn on a canvas with no text alternative.', notes: 'The product could be identified, but not its revenue.', trace: []
@@ -135,5 +135,39 @@ export function reportData(audit: Audit, anonymous: boolean) {
       ...task, trace: task.trace.map(({ id: _traceId, ...event }) => event)
     })),
     notice: 'Observed task evidence. Not an accessibility certification or legal advice.'
+  };
+}
+
+const outcomes: Outcome[] = ['not-tested', 'completed', 'partial', 'blocked'];
+const severities: Severity[] = ['low', 'medium', 'high', 'critical'];
+
+function text(value: unknown, limit: number): string {
+  return typeof value === 'string' ? value.slice(0, limit) : '';
+}
+
+/** Turns this product's JSON export back into an editable local audit. */
+export function auditFromImport(value: unknown): Audit {
+  if (!value || typeof value !== 'object') throw new Error('Choose a JSON report exported by Screenreader Task Audit.');
+  const report = value as Record<string, unknown>;
+  if (report.schema !== 'screenreader-task-audit/v1' || !Array.isArray(report.tasks)) throw new Error('This file is not a Screenreader Task Audit JSON report.');
+  if (report.tasks.length > 5) throw new Error('This report has more than five tasks and cannot be imported.');
+  const tasks = report.tasks.map((raw, index): AuditTask => {
+    if (!raw || typeof raw !== 'object') throw new Error(`Task ${index + 1} is not valid.`);
+    const task = raw as Record<string, unknown>;
+    const trace = Array.isArray(task.trace) ? task.trace.map((rawEvent, eventIndex): TraceEvent => {
+      if (!rawEvent || typeof rawEvent !== 'object') throw new Error(`Trace event ${eventIndex + 1} is not valid.`);
+      const event = rawEvent as Record<string, unknown>;
+      const kind = text(event.kind, 30) as TraceEvent['kind'];
+      if (!['focus', 'announcement', 'action', 'unexpected-change'].includes(kind)) throw new Error(`Trace event ${eventIndex + 1} has an unknown type.`);
+      return { id: crypto.randomUUID(), kind, time: text(event.time, 20), target: text(event.target, 100), observed: text(event.observed, 240) };
+    }) : [];
+    const outcome = text(task.outcome, 20) as Outcome;
+    const severity = text(task.severity, 20) as Severity;
+    if (!outcomes.includes(outcome) || !severities.includes(severity)) throw new Error(`Task ${index + 1} has an unknown result or impact.`);
+    return { id: crypto.randomUUID(), title: text(task.title, 100), goal: text(task.goal, 180), start: text(task.start, 120), outcome, severity, expected: text(task.expected, 1000), announced: text(task.announced, 1000), focus: text(task.focus, 1000), blocker: text(task.blocker, 1000), notes: text(task.notes, 1000), trace };
+  });
+  return {
+    id: crypto.randomUUID(), name: text(report.audit, 80) || 'Imported audit', product: text(report.product, 80), assistiveTech: '', browser: '', consent: true,
+    created: new Date().toISOString(), updated: new Date().toISOString(), tasks
   };
 }

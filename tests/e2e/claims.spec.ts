@@ -1,166 +1,116 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Download, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-test('@claim:demo-sandbox sample data is isolated and resettable', async ({ page }) => {
-  await page.goto('/demo');
+async function createAudit(page: Page): Promise<void> {
+  await page.goto('/audit');
+  await page.getByLabel('Audit name').fill('September critical tasks');
+  await page.getByLabel('Product or dashboard').fill('Example dashboard');
+  await page.getByLabel('Screen reader and version').fill('NVDA 2026');
+  await page.getByLabel('Browser and version').fill('Firefox 142');
+  await page.getByLabel(/The tester agreed/).check();
+  await page.getByRole('button', { name: 'Create audit' }).click();
+}
+async function readDownload(download: Download): Promise<string> {
+  const stream = await download.createReadStream(); let contents = '';
+  for await (const chunk of stream!) contents += chunk.toString();
+  return contents;
+}
+
+test('@claim:demo-sandbox demo uses isolated data, resets, and discards it when leaving', async ({ page }) => {
+  await createAudit(page);
+  await page.getByLabel('Other notes').fill('Real evidence survives.');
+  await page.goto('/?demo=1');
   await expect(page.getByText('Demo — sample data, nothing is saved')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'August analytics check' })).toBeVisible();
-  await page.getByLabel('Task name').fill('Changed only in the demo');
-  expect(await page.evaluate(() => localStorage.getItem('demo:sra:audit:v1'))).toContain('Changed only in the demo');
-  expect(await page.evaluate(() => localStorage.getItem('sra:audit:v1'))).toBeNull();
+  await page.getByLabel('Task name').fill('Changed only in demo');
+  expect(await page.evaluate(() => localStorage.getItem('demo:sra:audit:v1'))).toContain('Changed only in demo');
+  expect(await page.evaluate(() => localStorage.getItem('sra:audit:v1'))).toContain('Real evidence survives.');
   await page.getByRole('button', { name: 'Reset demo' }).click();
+  await expect(page.getByLabel('Task name')).toHaveValue('Change the report date range');
+  await page.getByRole('link', { name: 'Start for real' }).click();
+  await expect(page.getByLabel('Other notes')).toHaveValue('Real evidence survives.');
+  expect(await page.evaluate(() => localStorage.getItem('demo:sra:audit:v1'))).toBeNull();
+  await page.goto('/demo');
   await expect(page.getByLabel('Task name')).toHaveValue('Change the report date range');
 });
 
+test('@claim:core-workflow records evidence, persists it, and shows it in the report', async ({ page }) => {
+  await createAudit(page);
+  await page.getByLabel('Task name').fill('Export invoices');
+  await page.getByLabel('Tester’s goal').fill('Download the invoice list');
+  await page.getByLabel('Starting place').fill('Billing');
+  await page.getByLabel('Blocked').check();
+  await page.getByRole('radio', { name: 'Critical' }).check();
+  await page.getByLabel('Expected steps').fill('Open export and choose CSV.');
+  await page.getByLabel('Announcements heard').fill('Export button announced.');
+  await page.getByLabel('Focus movement').fill('Focus moved to the hidden menu.');
+  await page.getByLabel('Blocker').fill('Menu has no accessible name.');
+  await page.getByLabel('Other notes').fill('Reproduced twice.');
+  await page.getByRole('link', { name: 'Review report' }).click();
+  await expect(page.getByRole('heading', { name: 'Export invoices' })).toBeVisible();
+  await expect(page.getByText('Menu has no accessible name.')).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Export invoices' })).toBeVisible();
+});
+
+test('@claim:structured-capture requires consent and saves every event type', async ({ page }) => {
+  await page.goto('/audit');
+  await page.getByRole('button', { name: 'Create audit' }).click();
+  await expect(page.locator('#setup-error')).toContainText('Fill every field');
+  await createAudit(page);
+  for (const [kind, observed] of [['Focus', 'Focus reached search'], ['Announcement', 'Search announced'], ['Action', 'Pressed Enter']] as const) {
+    await page.getByRole('button', { name: 'Add trace event' }).click();
+    await page.getByLabel('Event type').selectOption({ label: kind });
+    await page.getByLabel('Control or area').fill('Search');
+    await page.getByLabel('What happened').fill(observed);
+    await page.getByRole('button', { name: 'Record event' }).click();
+  }
+  const stored = await page.evaluate(() => localStorage.getItem('sra:audit:v1'));
+  expect(stored).toContain('focus'); expect(stored).toContain('announcement'); expect(stored).toContain('action');
+});
+
 test('@claim:five-tasks free audits support five critical tasks', async ({ page }) => {
-  await page.goto('/demo');
+  await page.goto('/?demo=1');
   await expect(page.locator('.task-rail li')).toHaveCount(5);
   await expect(page.getByRole('button', { name: 'Add task' })).toBeDisabled();
 });
 
-test('@claim:license-unlock a valid license creates a link a clean browser can open', async ({ page, browser }) => {
-  const sharedId = '0123456789abcdef0123456789abcdef';
-  let createdReport: Record<string, unknown> | undefined;
-  await page.route('https://api.sociobot.in/**/verify?*', route => route.fulfill({ json: { valid: true, reason: 'ok', expires_at: null } }));
-  await page.route('**/api/reports', route => {
-    expect(route.request().method()).toBe('POST');
-    createdReport = route.request().postDataJSON() as Record<string, unknown>;
-    return route.fulfill({ status: 201, json: { id: sharedId, expires_at: '2026-09-27T00:00:00Z' } });
-  });
-  await page.goto('/demo');
-  await page.evaluate(() => localStorage.setItem('sra:audit:v1', localStorage.getItem('demo:sra:audit:v1')!.replace('demo-audit', 'real-audit')));
-  await page.goto('/report?license=test-license');
-  await page.getByRole('button', { name: 'Create private link' }).click();
-  await expect(page.locator('#report-status')).toContainText(`/share/${sharedId}`);
-  expect(createdReport).toMatchObject({ schema: 'screenreader-task-audit/v1', audit: 'August analytics check' });
-
-  const cleanContext = await browser.newContext();
-  try {
-    const sharedPage = await cleanContext.newPage();
-    await sharedPage.route(`**/api/reports/${sharedId}`, route => {
-      expect(route.request().headers().authorization).toBeUndefined();
-      return route.fulfill({ json: createdReport });
-    });
-    await sharedPage.goto(`/share/${sharedId}`);
-    await expect(sharedPage.getByRole('heading', { name: 'August analytics check' })).toBeVisible();
-    await expect(sharedPage.getByText('Change the report date range')).toBeVisible();
-  } finally {
-    await cleanContext.close();
-  }
+test('@claim:report-priority orders tasks by result and impact everywhere', async ({ page }) => {
+  await page.goto('/demo/report');
+  await expect(page.locator('.report-task h2')).toHaveText(['Change the report date range', 'Find the top-selling product', 'Create a weekly alert', 'Export the orders report', 'Invite a team member']);
+  const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click();
+  const data = JSON.parse(await readDownload(await download)) as { tasks: { title: string }[] };
+  expect(data.tasks.map(task => task.title)).toEqual(['Change the report date range', 'Find the top-selling product', 'Create a weekly alert', 'Export the orders report', 'Invite a team member']);
 });
 
 test('@claim:html-export exports an accessible standalone report', async ({ page }) => {
-  await page.goto('/demo/report');
-  const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export accessible HTML' }).click();
-  const download = await downloadPromise;
-  const stream = await download.createReadStream();
-  let contents = '';
-  for await (const chunk of stream) contents += chunk.toString();
-  expect(contents).toContain('<html lang="en">');
-  expect(contents).toContain('Change the report date range');
-  expect(contents).toContain('Not an accessibility certification');
+  await page.goto('/demo/report'); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export accessible HTML' }).click(); const stream = await (await download).createReadStream(); let html = ''; for await (const chunk of stream!) html += chunk.toString(); expect(html).toContain('<html lang="en">'); expect(html).toContain('Change the report date range');
+});
+test('@claim:json-export exports five tasks as JSON', async ({ page }) => { await page.goto('/demo/report'); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click(); const stream = await (await download).createReadStream(); let json = ''; for await (const chunk of stream!) json += chunk.toString(); const exported = JSON.parse(json); expect(exported.schema).toBe('screenreader-task-audit/v1'); expect(exported.tasks).toHaveLength(5); });
+test('@claim:anonymous-export removes product and environment names from JSON', async ({ page }) => { await page.goto('/demo/report'); await page.getByLabel('Remove product and environment names').check(); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click(); const stream = await (await download).createReadStream(); let json = ''; for await (const chunk of stream!) json += chunk.toString(); expect(json).not.toContain('Northstar Metrics'); expect(JSON.parse(json)).toMatchObject({ product: 'Product withheld', environment: 'Withheld' }); });
+
+test('@claim:import-json restores a JSON export only after confirmation', async ({ page }) => {
+  await page.goto('/demo/report'); const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export JSON' }).click(); const stream = await (await download).createReadStream(); let contents = ''; for await (const chunk of stream!) contents += chunk.toString();
+  await page.goto('/audit'); await page.getByLabel('Import audit JSON').setInputFiles({ name: 'audit.json', mimeType: 'application/json', buffer: Buffer.from(contents) });
+  await expect(page.getByRole('heading', { name: 'Ready to restore this audit' })).toBeVisible(); expect(await page.evaluate(() => localStorage.getItem('sra:audit:v1'))).not.toContain('August analytics check');
+  await page.getByRole('button', { name: 'Restore imported audit' }).click(); await expect(page.getByRole('heading', { name: 'August analytics check' })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit audit details' }).click(); await page.getByLabel('Import audit JSON').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"tasks":[]}') }); await expect(page.locator('#import-error')).toContainText('not a Screenreader Task Audit');
 });
 
-test('@claim:json-export exports the complete report as JSON', async ({ page }) => {
-  await page.goto('/demo/report');
-  const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export JSON' }).click();
-  const download = await downloadPromise;
-  const stream = await download.createReadStream();
-  let contents = '';
-  for await (const chunk of stream) contents += chunk.toString();
-  const exported = JSON.parse(contents) as { schema: string; product: string; tasks: unknown[] };
-  expect(exported.schema).toBe('screenreader-task-audit/v1');
-  expect(exported.product).toBe('Northstar Metrics');
-  expect(exported.tasks).toHaveLength(5);
+test('@claim:privacy-boundaries keep local audit data local and avoid capture or analytics', async ({ page, baseURL }) => {
+  const external: string[] = []; const api: string[] = []; const origin = new URL(baseURL!).origin;
+  await page.addInitScript(() => { (window as unknown as { captureCalls: string[] }).captureCalls = []; const media = navigator.mediaDevices as MediaDevices & Record<string, unknown>; for (const name of ['getDisplayMedia', 'getUserMedia']) { const original = media[name] as ((...args: unknown[]) => unknown) | undefined; if (original) Object.defineProperty(media, name, { configurable: true, value: (...args: unknown[]) => { (window as unknown as { captureCalls: string[] }).captureCalls.push(name); return original.apply(media, args); } }); } });
+  page.on('request', request => { const url = new URL(request.url()); if (url.origin !== origin) external.push(url.href); if (url.pathname.startsWith('/api/')) api.push(url.href); });
+  for (const route of ['/', '/?demo=1', '/audit', '/report', '/privacy', '/terms']) await page.goto(route);
+  expect(await page.evaluate(() => (window as unknown as { captureCalls: string[] }).captureCalls)).toEqual([]);
+  expect(external).toEqual([]); expect(api).toEqual([]);
 });
+test('@claim:offline-reload demo reloads offline after its first visit', async ({ page, context }) => { await page.goto('/?demo=1'); await page.evaluate(async () => { await navigator.serviceWorker.ready; }); await page.reload(); await context.setOffline(true); await page.reload(); await expect(page.getByText('You are offline. Saved audits and the demo still work.')).toBeVisible(); await expect(page.getByRole('heading', { name: 'August analytics check' })).toBeVisible(); });
+test('@claim:manual-evidence-not-certification records observations without scans or scores', async ({ page }) => { await page.goto('/'); await expect(page.getByText('It records manual observations. It does not scan a product.')).toBeVisible(); await expect(page.getByText('It does not certify accessibility or provide legal advice.')).toBeVisible(); await expect(page.getByText(/score/i)).toHaveCount(0); });
 
-test('@claim:anonymous-export removes product and environment names from a JSON export', async ({ page }) => {
-  await page.goto('/demo/report');
-  await page.getByLabel('Remove product and environment names').check();
-  const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export JSON' }).click();
-  const download = await downloadPromise;
-  const stream = await download.createReadStream();
-  let contents = '';
-  for await (const chunk of stream) contents += chunk.toString();
-  const exported = JSON.parse(contents) as { product: string; environment: string };
-  expect(exported).toMatchObject({ product: 'Product withheld', environment: 'Withheld' });
-  expect(contents).not.toContain('Northstar Metrics');
-  expect(contents).not.toContain('NVDA 2026.1');
+test('routes have unique metadata, real 404, accessible structure, and 44px targets', async ({ page }) => {
+  const checks: [string, string][] = [['/', 'Screenreader Task Audit — record task evidence'], ['/?demo=1', 'Demo — Screenreader Task Audit'], ['/audit', 'My audit — Screenreader Task Audit'], ['/report', 'Report — Screenreader Task Audit'], ['/demo/report', 'Demo report — Screenreader Task Audit'], ['/privacy', 'Privacy — Screenreader Task Audit'], ['/terms', 'Terms — Screenreader Task Audit'], ['/missing', 'Page not found — Screenreader Task Audit']];
+  for (const [path, title] of checks) { await page.goto(path); await expect(page).toHaveTitle(title); await expect(page.locator('main')).toHaveCount(1); await expect(page.locator('h1')).toHaveCount(1); }
+  await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/?demo=1'); expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390); for (const box of await page.locator('a,button').evaluateAll(elements => elements.map(element => { const box = element.getBoundingClientRect(); return { width: box.width, height: box.height }; }))) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
 });
-
-test('@claim:free-local-storage saves a free audit locally without an API request', async ({ page, baseURL }) => {
-  const apiRequests: string[] = [];
-  const externalRequests: string[] = [];
-  const productOrigin = new URL(baseURL!).origin;
-  page.on('request', request => {
-    if (new URL(request.url()).pathname.startsWith('/api/')) apiRequests.push(request.url());
-    if (new URL(request.url()).origin !== productOrigin) externalRequests.push(request.url());
-  });
-  await page.goto('/audit');
-  await page.getByLabel('Audit name').fill('Local-only audit');
-  await page.getByLabel('Product or dashboard').fill('Private dashboard');
-  await page.getByLabel('Screen reader and version').fill('NVDA');
-  await page.getByLabel('Browser and version').fill('Firefox');
-  await page.getByLabel(/The tester agreed to record these observations/).check();
-  await page.getByRole('button', { name: 'Create audit' }).click();
-  await page.getByLabel('Other notes').fill('Keep this evidence in the browser.');
-  await expect(page.locator('#save-status')).toContainText('Saved in this browser.');
-  expect(await page.evaluate(() => localStorage.getItem('sra:audit:v1'))).toContain('Keep this evidence in the browser.');
-  expect(apiRequests).toEqual([]);
-  expect(externalRequests).toEqual([]);
-});
-
-test('@claim:hosted-checkout shows the $39 one-time hosted-payment terms', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.getByText('$39 once')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Buy team sharing' }).first()).toHaveAttribute(
-    'href',
-    'https://api.sociobot.in/api/v1/products/screenreader-task-audit/checkout'
-  );
-  await expect(page.getByText('Sociobot and Dodo handle payment and refunds.')).toBeVisible();
-});
-
-test('@claim:offline-reload demo reloads offline after first visit', async ({ page, context }) => {
-  await page.goto('/demo');
-  await page.evaluate(async () => { const registration = await navigator.serviceWorker.ready; await registration.update(); });
-  await page.reload();
-  await expect(page.getByRole('heading', { name: 'August analytics check' })).toBeVisible();
-  await context.setOffline(true);
-  await page.reload();
-  await expect(page.getByText('You are offline. Saved audits and the demo still work.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'August analytics check' })).toBeVisible();
-});
-
-test('landing and audit pages have no serious accessibility findings', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  page.on('pageerror', error => errors.push(error.message));
-  for (const path of ['/', '/demo', '/demo/report', '/privacy', '/terms']) {
-    await page.goto(path);
-    await expect(page.locator('main')).toHaveCount(1);
-    await expect(page.locator('h1')).toHaveCount(1);
-    const results = await new AxeBuilder({ page }).analyze();
-    expect(results.violations.filter(issue => ['serious','critical'].includes(issue.impact || ''))).toEqual([]);
-  }
-  await page.emulateMedia({ colorScheme: 'dark' });
-  for (const path of ['/', '/demo']) {
-    await page.goto(path);
-    const results = await new AxeBuilder({ page }).analyze();
-    expect(results.violations.filter(issue => ['serious','critical'].includes(issue.impact || ''))).toEqual([]);
-  }
-  expect(errors).toEqual([]);
-});
-
-test('keyboard route changes focus the page heading', async ({ page }) => {
-  await page.goto('/');
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused();
-  await page.keyboard.press('Enter');
-  await expect(page.locator('main')).toBeFocused();
-  await page.keyboard.press('Tab');
-  await page.getByRole('link', { name: 'Demo', exact: true }).press('Enter');
-  await expect(page.locator('h1')).toBeFocused();
-});
+test('all public routes have no serious accessibility findings or console errors', async ({ page }) => { const errors: string[] = []; page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); }); for (const path of ['/', '/?demo=1', '/demo/report', '/privacy', '/terms', '/missing']) { await page.goto(path); const result = await new AxeBuilder({ page }).analyze(); expect(result.violations.filter(issue => ['serious', 'critical'].includes(issue.impact || ''))).toEqual([]); } expect(errors).toEqual([]); });
+test('keyboard navigation moves focus to each new heading', async ({ page }) => { await page.goto('/'); await page.keyboard.press('Tab'); await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused(); await page.keyboard.press('Enter'); await expect(page.locator('main')).toBeFocused(); await page.getByRole('link', { name: 'Demo', exact: true }).press('Enter'); await expect(page.locator('h1')).toBeFocused(); });

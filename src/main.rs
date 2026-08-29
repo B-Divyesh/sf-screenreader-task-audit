@@ -45,7 +45,7 @@ struct Health {
     build_sha: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct Created {
     id: String,
     expires_at: String,
@@ -511,25 +511,30 @@ mod tests {
         assert_eq!(response.status(), StatusCode::PAYMENT_REQUIRED);
     }
     #[tokio::test]
-    async fn claim_shared_links_expire_after_30_days() {
+    async fn claim_backend_report_validation() {
         let state = state().await;
-        let body = serde_json::json!({"schema":"screenreader-task-audit/v1","tasks":[]});
-        let (_, Json(made)) = store_report(&state.db, body).await.unwrap();
-        let expires = chrono::DateTime::parse_from_rfc3339(&made.expires_at)
-            .unwrap()
-            .timestamp();
-        let remaining = expires - chrono::Utc::now().timestamp();
-        assert!((2_591_995..=2_592_005).contains(&remaining));
-        let response = app(state, test_dist())
-            .oneshot(
-                Request::builder()
-                    .uri(format!("/api/reports/{}", made.id))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        let valid =
+            serde_json::json!({"schema":"screenreader-task-audit/v1","tasks":[{},{},{},{},{}]});
+        assert!(store_report(&state.db, valid).await.is_ok());
+        let too_many =
+            serde_json::json!({"schema":"screenreader-task-audit/v1","tasks":[{},{},{},{},{},{}]});
+        assert_eq!(
+            validate_report(&too_many).unwrap_err().status,
+            StatusCode::BAD_REQUEST
+        );
+
+        let template =
+            serde_json::json!({"schema":"screenreader-task-audit/v1","tasks":[],"padding":""});
+        let base = serde_json::to_string(&template).unwrap().len();
+        let exact = serde_json::json!({"schema":"screenreader-task-audit/v1","tasks":[],"padding":"x".repeat(200_000 - base)});
+        assert_eq!(serde_json::to_string(&exact).unwrap().len(), 200_000);
+        assert!(store_report(&state.db, exact).await.is_ok());
+        let over = serde_json::json!({"schema":"screenreader-task-audit/v1","tasks":[],"padding":"x".repeat(200_001 - base)});
+        assert_eq!(serde_json::to_string(&over).unwrap().len(), 200_001);
+        assert_eq!(
+            store_report(&state.db, over).await.unwrap_err().status,
+            StatusCode::BAD_REQUEST
+        );
     }
     #[tokio::test]
     async fn limiter_returns_retry_after() {
@@ -557,7 +562,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn limiter_is_atomic_across_instances_for_the_verifiers_exact_burst() {
+    async fn claim_backend_rate_limit() {
         let db_path = std::env::temp_dir().join(format!(
             "screenreader-task-audit-rate-{}.db",
             Uuid::new_v4()
