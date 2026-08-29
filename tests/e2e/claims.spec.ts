@@ -145,6 +145,10 @@ test('@claim:team-sharing restores a Sociobot license and creates a private repo
   const sharedLink = page.getByRole('link', { name: 'Open the private report' });
   await expect(sharedLink).toHaveAttribute('href', /\/share\/[a-f0-9]{32}$/);
   const sharedUrl = await sharedLink.getAttribute('href');
+  await page.goto('/privacy');
+  await expect(page.getByText('Creating a private link sends the reviewed report to this service.')).toBeVisible();
+  await page.goto('/terms');
+  await expect(page.getByText('Team sharing is a one-time $39 purchase.')).toBeVisible();
   const readerContext = await browser.newContext();
   try {
     const reader = await readerContext.newPage();
@@ -155,10 +159,6 @@ test('@claim:team-sharing restores a Sociobot license and creates a private repo
   } finally {
     await readerContext.close();
   }
-  await page.goto('/privacy');
-  await expect(page.getByText('Creating a private link sends the reviewed report to this service.')).toBeVisible();
-  await page.goto('/terms');
-  await expect(page.getByText('Team sharing is a one-time $39 purchase.')).toBeVisible();
 });
 
 test('@claim:payment-boundary hands checkout off without collecting card details on this origin', async ({ page }) => {
