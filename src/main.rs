@@ -537,10 +537,9 @@ mod tests {
         );
     }
     #[tokio::test]
-    async fn limiter_returns_retry_after() {
+    async fn limiter_blocks_the_41st_request_with_retry_after() {
         let app = app(state().await, test_dist());
-        let mut limited = None;
-        for _ in 0..45 {
+        for request_number in 1..=41 {
             let response = app
                 .clone()
                 .oneshot(
@@ -552,13 +551,17 @@ mod tests {
                 )
                 .await
                 .unwrap();
-            if response.status() == StatusCode::TOO_MANY_REQUESTS {
-                limited = Some(response);
-                break;
+            if request_number <= 40 {
+                assert_eq!(
+                    response.status(),
+                    StatusCode::NOT_FOUND,
+                    "request {request_number} should remain inside the burst allowance"
+                );
+            } else {
+                assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+                assert_eq!(response.headers().get(header::RETRY_AFTER).unwrap(), "1");
             }
         }
-        let response = limited.expect("burst should be limited");
-        assert_eq!(response.headers().get("retry-after").unwrap(), "1");
     }
 
     #[tokio::test]

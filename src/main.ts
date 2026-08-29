@@ -1,11 +1,13 @@
 import './style.css';
-import { auditFromImport, blankTask, loadAudit, resetAudit, saveAudit, priority, reportData, type Audit, type AuditTask, type Outcome, type Severity } from './model';
+import { auditFromImport, blankAudit, blankTask, loadAudit, resetAudit, saveAudit, priority, reportData, type Audit, type AuditTask, type Outcome, type Severity } from './model';
 import { downloadHtml, downloadJson, escapeHtml } from './export';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const SITE = 'https://screenreader-task-audit.sociobot.in';
 let demoMode = false;
-let audit: Audit = loadAudit(false);
+// Do not touch browser storage before the route is known. In particular, a
+// direct /demo visit must never read or create the real-audit namespace.
+let audit: Audit = blankAudit();
 let activeTaskId = '';
 let traceOpen = false;
 let message = '';

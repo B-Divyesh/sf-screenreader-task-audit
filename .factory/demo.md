@@ -1,6 +1,6 @@
 # Demo sandbox
 
-- URL: `?demo=1` or `/demo` (production: `https://screenreader-task-audit.sociobot.in/?demo=1`)
+- URL: `?demo=1` or `/demo` (production: `https://screenreader-task-audit.sociobot.in/?demo=1`). A direct demo load touches only the `demo:sra:audit:v1` browser-storage namespace; it never reads or writes `sra:audit:v1`.
 - Storage namespace: `demo:sra:audit:v1`
 - Real storage namespace: `sra:audit:v1`
 - Reset: choose **Reset demo** in the persistent banner.

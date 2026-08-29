@@ -66,6 +66,14 @@ The axum server serves `dist/` and exposes `GET /health`. Reserved report API ro
 
 API routes accept a burst of 40 requests from the first `X-Forwarded-For` address. One idle second resets the allowance. Limited responses return `429` and `Retry-After: 1`.
 
+After deployment, verify that public boundary with:
+
+```sh
+npm run verify:live-rate-limit
+```
+
+The check sends 41 harmless requests for one forwarded address. Requests 1–40 must return `404`; request 41 must return `429` with `Retry-After: 1`.
+
 ## Privacy and legal pages
 
 Read `/privacy` and `/terms` in the app. Implementation details live in [.factory/design.md](.factory/design.md), [.factory/demo.md](.factory/demo.md), and [.factory/claims.json](.factory/claims.json).

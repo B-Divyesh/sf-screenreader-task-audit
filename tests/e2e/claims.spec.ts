@@ -16,18 +16,36 @@ async function readDownload(download: Download): Promise<string> {
   return contents;
 }
 
-test('@claim:demo-sandbox demo uses isolated data, resets, and discards it when leaving', async ({ page }) => {
-  await createAudit(page);
-  await page.getByLabel('Other notes').fill('Real evidence survives.');
-  await page.goto('/?demo=1');
+test('@claim:demo-sandbox direct demo access is isolated, resets, and discards sample data', async ({ page }) => {
+  await page.addInitScript(() => {
+    type StorageOperation = { kind: string; key: string | null };
+    const operations: StorageOperation[] = [];
+    const storage = Storage.prototype;
+    for (const kind of ['getItem', 'setItem', 'removeItem'] as const) {
+      const original = storage[kind];
+      Object.defineProperty(storage, kind, {
+        configurable: true,
+        value(this: Storage, key: string, ...rest: unknown[]) {
+          operations.push({ kind, key });
+          return (original as (...args: unknown[]) => unknown).call(this, key, ...rest);
+        }
+      });
+    }
+    (window as unknown as { demoStorageOperations: StorageOperation[] }).demoStorageOperations = operations;
+  });
+  await page.goto('/demo');
   await expect(page.getByText('Demo — sample data, nothing is saved')).toBeVisible();
+  const directDemoOperations = await page.evaluate(() => (window as unknown as { demoStorageOperations: { kind: string; key: string | null }[] }).demoStorageOperations);
+  expect(directDemoOperations.some(operation => operation.key === 'sra:audit:v1')).toBe(false);
+  expect(directDemoOperations.some(operation => operation.key === 'demo:sra:audit:v1')).toBe(true);
+  expect(await page.evaluate(() => localStorage.getItem('sra:audit:v1'))).toBeNull();
   await page.getByLabel('Task name').fill('Changed only in demo');
   expect(await page.evaluate(() => localStorage.getItem('demo:sra:audit:v1'))).toContain('Changed only in demo');
-  expect(await page.evaluate(() => localStorage.getItem('sra:audit:v1'))).toContain('Real evidence survives.');
+  expect(await page.evaluate(() => localStorage.getItem('sra:audit:v1'))).toBeNull();
   await page.getByRole('button', { name: 'Reset demo' }).click();
   await expect(page.getByLabel('Task name')).toHaveValue('Change the report date range');
   await page.getByRole('link', { name: 'Start for real' }).click();
-  await expect(page.getByLabel('Other notes')).toHaveValue('Real evidence survives.');
+  await expect(page.getByRole('heading', { name: 'Set up a screen-reader task audit' })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('demo:sra:audit:v1'))).toBeNull();
   await page.goto('/demo');
   await expect(page.getByLabel('Task name')).toHaveValue('Change the report date range');
