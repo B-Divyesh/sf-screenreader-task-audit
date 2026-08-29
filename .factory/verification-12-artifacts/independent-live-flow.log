@@ -1,0 +1,26 @@
+{
+  "result": "PASS",
+  "firstRead": {
+    "what": "Record screen-reader task evidence",
+    "who": "blind founders and small teams",
+    "firstClick": "Try it with sample data"
+  },
+  "demoTasks": 5,
+  "boundaryAuditNameCharacters": 80,
+  "realTasks": 5,
+  "traceInvalidThenRecovered": true,
+  "offlineSavedReportReload": true,
+  "requestCount": 10,
+  "origins": [
+    "https://screenreader-task-audit.sociobot.in"
+  ],
+  "requests": [
+    "https://screenreader-task-audit.sociobot.in/",
+    "https://screenreader-task-audit.sociobot.in/assets/index-BZ5BOG3E.js",
+    "https://screenreader-task-audit.sociobot.in/assets/index-B2jUSphi.css",
+    "https://screenreader-task-audit.sociobot.in/assets/audit-collage.webp",
+    "https://screenreader-task-audit.sociobot.in/report"
+  ],
+  "consoleErrors": [],
+  "pageErrors": []
+}

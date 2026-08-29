@@ -1,0 +1,45 @@
+{
+  "result": "PASS",
+  "axe": [
+    {
+      "path": "/",
+      "status": 200,
+      "seriousCritical": []
+    },
+    {
+      "path": "/demo",
+      "status": 200,
+      "seriousCritical": []
+    },
+    {
+      "path": "/demo/report",
+      "status": 200,
+      "seriousCritical": []
+    },
+    {
+      "path": "/privacy",
+      "status": 200,
+      "seriousCritical": []
+    },
+    {
+      "path": "/terms",
+      "status": 200,
+      "seriousCritical": []
+    },
+    {
+      "path": "/missing",
+      "status": 404,
+      "seriousCritical": []
+    }
+  ],
+  "keyboard": {
+    "firstFocus": "Skip to main content",
+    "skipTarget": "MAIN",
+    "routeFocus": "H1",
+    "taskFocus": "task-heading"
+  },
+  "focusOutline": "rgb(138, 181, 255) solid 3px",
+  "reducedMotionAnimationDuration": "1e-05s",
+  "minTouchTargetPx": 44,
+  "text200PercentMaxScrollWidth": 390
+}

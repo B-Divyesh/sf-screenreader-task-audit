@@ -1,0 +1,19 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+     Running unittests src/main.rs (target/debug/deps/screenreader_task_audit-403f73e42ad95a40)
+
+running 12 tests
+test tests::claim_backend_rate_limit ... ok
+test tests::claim_backend_report_validation ... ok
+test tests::container_uses_local_sqlite_and_mounts_only_durable_snapshots ... ok
+test tests::documented_spa_routes_direct_load_and_reload_with_ok_status ... ok
+test tests::health_returns_build_sha ... ok
+test tests::limiter_blocks_the_41st_request_with_retry_after ... ok
+test tests::local_sqlite_uses_a_rollback_journal_and_one_connection ... ok
+test tests::restores_a_nonempty_durable_snapshot_to_the_local_sqlite_path ... ok
+test tests::sharing_requires_a_license ... ok
+test tests::snapshots_the_local_sqlite_file_to_the_durable_volume ... ok
+test tests::sqlite_limiter_deployment_is_pinned_to_one_replica ... ok
+test tests::unknown_paths_are_a_real_404_and_assets_are_immutable ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.07s
+

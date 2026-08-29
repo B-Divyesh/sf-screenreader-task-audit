@@ -1,0 +1,5 @@
+
+> screenreader-task-audit@1.0.0 verify:live-checkout
+> sh scripts/verify-live-checkout.sh
+
+checkout verified: catalog USD 39.00; 303 to hosted Dodo session

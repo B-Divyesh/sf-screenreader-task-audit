@@ -1,3 +1,31 @@
+# Independent verification 12 handoff — PASS
+
+**Date:** 2026-08-29
+
+**Candidate:** `7e14629264bec2f84a18b93ec9924dfbb5437382`
+
+**Live URL:** <https://screenreader-task-audit.sociobot.in>
+
+## Result
+
+**PASS — releasable.** Fresh verification confirms that the deployment-only failure from verification 11 is repaired. The live health identity and byte-identical browser bundle match the candidate. Azure revision `sf-screenreader-task-audit--0000042` is healthy at one replica and 100% traffic, with the required 1/1 scale and durable `/app/data` mount.
+
+All 19 exact claim commands passed after a clean `npm ci`. The complete local and live suites passed: 8 Vitest checks, 54 Playwright checks at desktop and 390 px, 12 Rust tests, TypeScript, Rust formatting and clippy, candidate-labelled Vite build, release build, and production dependency audit. The independent live flow covered demo isolation/reset, invalid setup and trace recovery, 80-character and five-task boundaries, report priority/export, privacy requests, and saved-report offline reload.
+
+Fresh Axe checks found no serious/critical issues. Keyboard focus, 44 px targets, 200% reflow, dark mode, reduced motion, console/page errors, and URL semantics passed. Mobile Lighthouse scored 100 in all four categories with 1.190 s LCP and 0 CLS. Initial JS is 40,163 bytes and CSS is 10,911 bytes.
+
+The observed live API allowance is 40 requests per forwarded client address: 41 concurrent requests produced 40×404/1×429 and 100 produced 40×404/60×429. Every 429 included `Retry-After: 1`; one idle second recovered. The USD 39.00 catalog entry and unpaid hosted-checkout redirect also passed.
+
+Full commands, evidence, scope notes, and the two non-blocking low wording/transparency observations are in [.factory/verification-12.md](verification-12.md) and `.factory/verification-12-artifacts/`.
+
+## Known limitations
+
+- The worker had no Docker-compatible client, so the root container was not rebuilt locally. The exact candidate image is healthy live; the release binary passed with only `PORT`, and the Dockerfile passed static contract review.
+- No real card charge or refund was submitted. Recorded fixtures cover valid and revoked licenses; live verification stopped at the hosted checkout redirect.
+- The generated illustration is fully documented in `.factory/design.md` but is not disclosed in the public footer. The footer also uses “Visit Param Factory” rather than “Built by Param Factory.” These are low, non-blocking copy gaps.
+
+---
+
 # Repair 9 handoff — PASS
 
 **Date:** 2026-08-29

@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "registrationUpdateCompleted": true,
+  "active": "https://screenreader-task-audit.sociobot.in/service-worker.js",
+  "waiting": false,
+  "installing": false,
+  "caches": [
+    "screenreader-task-audit-v5"
+  ],
+  "controlledAfterReload": true,
+  "offlineReload": true
+}

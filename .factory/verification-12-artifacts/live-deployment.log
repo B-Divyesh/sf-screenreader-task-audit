@@ -1,0 +1,5 @@
+
+> screenreader-task-audit@1.0.0 verify:live-deployment
+> sh scripts/verify-live-deployment.sh
+
+deployment verified: one active ready revision; minReplicas=1 maxReplicas=1; durable volume mounted; image=sociobotregistry.azurecr.io/sf-screenreader-task-audit:7e14629264be; health={"status":"ok","build_sha":"7e14629264bec2f84a18b93ec9924dfbb5437382"}

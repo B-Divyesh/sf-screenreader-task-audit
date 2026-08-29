@@ -1,0 +1,39 @@
+
+> screenreader-task-audit@1.0.0 test
+> npm run test:unit && npm run test:e2e
+
+
+> screenreader-task-audit@1.0.0 test:unit
+> vitest run
+
+
+ RUN  v3.2.7 /work/repo
+
+ ✓ tests/model.test.ts (5 tests) 8ms
+ ✓ tests/deployment-topology.test.ts (3 tests) 565ms
+
+ Test Files  2 passed (2)
+      Tests  8 passed (8)
+   Start at  22:47:30
+   Duration  1.82s (transform 312ms, setup 0ms, collect 400ms, tests 573ms, environment 0ms, prepare 639ms)
+
+
+> screenreader-task-audit@1.0.0 test:e2e
+> playwright test
+
+[WebServer] (node:8823) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer]     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
+[WebServer]      Running `target/debug/screenreader-task-audit`
+
+Running 54 tests using 1 worker
+(node:8849) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:8849) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+···························(node:9332) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:9332) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+···························
+  54 passed (1.9m)
