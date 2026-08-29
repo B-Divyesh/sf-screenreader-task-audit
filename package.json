@@ -10,7 +10,8 @@
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "test:backend": "cargo test",
-    "verify:live-rate-limit": "sh scripts/verify-live-rate-limit.sh"
+    "verify:live-rate-limit": "sh scripts/verify-live-rate-limit.sh",
+    "verify:live-deployment": "sh scripts/verify-live-deployment.sh"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.10.2",

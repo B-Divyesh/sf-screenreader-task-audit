@@ -64,12 +64,13 @@ Open <http://localhost:8080/?demo=1> and check <http://localhost:8080/health>.
 
 The axum server serves `dist/` and exposes `GET /health`. Reserved report API routes validate a report body before storage. They allow no more than five tasks and a 200 KB encoded body.
 
-API routes accept a burst of 40 requests from the first `X-Forwarded-For` address. One idle second resets the allowance. Limited responses return `429` and `Retry-After: 1`. The SQLite-backed container is deployed as one replica so that every request for a client uses the same limiter state.
+API routes accept a burst of 40 requests from the first `X-Forwarded-For` address. One idle second resets the allowance. Limited responses return `429` and `Retry-After: 1`. The SQLite-backed report and limiter store are local to the container, so the versioned [container scale configuration](.factory/container-scale.json) requires exactly one replica.
 
 After deployment, verify that public boundary with:
 
 ```sh
 npm run verify:live-rate-limit
+EXPECTED_BUILD_SHA=$(git rev-parse HEAD) npm run verify:live-deployment
 ```
 
 The check sends concurrent harmless bursts for one forwarded address. The 41-request burst must return 40 `404` responses and one `429` with `Retry-After: 1`. A 100-request burst must return 40 `404` responses and 60 `429` responses, then recover after one idle second.
@@ -80,7 +81,7 @@ Read `/privacy` and `/terms` in the app. Implementation details live in [.factor
 
 ## Deploy
 
-The factory deploys the root `Dockerfile`. It builds the Vite frontend and Rust server in separate stages. The runtime listens on `PORT` as a non-root user. Keep this SQLite deployment at exactly one replica unless reports and rate-limit state move to a shared database.
+The factory deploys the root `Dockerfile`. It builds the Vite frontend and Rust server in separate stages. The runtime listens on `PORT` as a non-root user. The deployment helper reads `.factory/container-scale.json`; keep this SQLite deployment at exactly one replica unless reports and rate-limit state move to a shared database.
 
 ## License
 

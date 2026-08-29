@@ -649,6 +649,14 @@ mod tests {
         std::fs::remove_file(db_path).unwrap();
     }
 
+    #[test]
+    fn sqlite_limiter_deployment_is_pinned_to_one_replica() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".factory/container-scale.json");
+        let config: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        assert_eq!(config.get("minReplicas").and_then(Value::as_u64), Some(1));
+        assert_eq!(config.get("maxReplicas").and_then(Value::as_u64), Some(1));
+    }
+
     #[tokio::test]
     async fn documented_spa_routes_direct_load_and_reload_with_ok_status() {
         let app = app(state().await, test_dist());
