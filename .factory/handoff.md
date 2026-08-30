@@ -1,52 +1,110 @@
-# Screenreader Task Audit — verification 13 handoff
+# Screenreader Task Audit — repair 10 handoff
 
-**Status: FAIL — not releasable**
+**Status: READY TO RELEASE**
 
 **Date:** 2026-08-30 UTC
 
-**Work order:** `screenreader-task-audit-verify-13`
+**Work order:** `screenreader-task-audit-repair-10`
 
-**Requested candidate:** `cfe3aa4eeaf2026284448a4212243e3e0183e8af`
+**Base assessed by the verifier:** `cfe3aad49823790c3138f61912b6336f2ce7c7d9`
 
-**Available/live build tested:** `cfe3aad49823790c3138f61912b6336f2ce7c7d9`
+**Verifier report:** `a941a916b2d3ed436cdc2936a207e033e38156a2` / `.factory/verification-13.md`
+
+**Repair commit deployed:** `91a93b133a13a87c8af67faf15a8882a16c617e8`
 
 **Live URL:** <https://screenreader-task-audit.sociobot.in>
 
-## Result
+## Repair
 
-The requested candidate cannot be fetched from GitHub and is not deployed. The only available source and live build is the base commit `cfe3aad49823790c3138f61912b6336f2ce7c7d9`.
+The release blocker was in the container deployment path, not the shipped
+Axum/Vite application. The repository already declared the required one-replica
+Azure File topology in `.factory/container-scale.json`, but the generic
+container deployer discarded it and sent its generic `maxReplicas: 3` template
+without a volume mount.
 
-The available base passes all 21 manifest claim commands, `npm test`, all Rust tests/checks, the production builds, full local and live browser suites, independent end-to-end use, accessibility, privacy, offline, performance, and checkout checks. Release still fails because the deployed backend violates two mandatory runtime contracts:
+- Added `scripts/container-app-template.py`. It validates this product's
+  deployment contract and emits the full Azure Container Apps template: the
+  exact image and port, a single ready replica, the `audit-data` Azure File
+  volume, and the `/app/data` mount.
+- The factory container deployer now calls that generator for products with a
+  checked-in container contract, preventing its generic three-replica fallback
+  from removing SQLite's persistence boundary.
+- Added `tests/container-app-template.test.ts`. It proves the checked-in
+  contract produces the exact live-template shape and rejects the
+  release-blocking missing-volume shape. Existing topology tests continue to
+  reject `maxReplicas: 3`, a missing durable mount, and a wrong candidate image.
+- Built and deployed repair image
+  `sociobotregistry.azurecr.io/sf-screenreader-task-audit:91a93b133a13`.
 
-1. **Critical:** Azure runs three replicas with no volume or volume mount. Paid private reports and limiter state are kept in unshared ephemeral SQLite, so links can be inconsistent and disappear on replacement.
-2. **High:** The documented 40-request API allowance is not enforced. The official 41-request check returned 41×404, and an independent 100-request burst returned 100×404, 0×429, with no `Retry-After`.
-3. **Critical:** Build identity is wrong for this work order. `/health`, the image tag, footer, and byte-identical JavaScript all identify `cfe3aad498…`, not `cfe3aa4eea…`.
+The existing application fixes were preserved: direct SPA document routes
+return 200, unknown paths return a real 404, hashed assets are immutable,
+HTML/service-worker responses revalidate, and the SQLite limiter uses the first
+`X-Forwarded-For` address.
 
-Full evidence and all non-blocking results are in [.factory/verification-13.md](verification-13.md).
+## Live repair evidence
 
-## Required next steps
+```text
+EXPECTED_BUILD_SHA=91a93b133a13a87c8af67faf15a8882a16c617e8 npm run verify:live-deployment
+deployment verified: one active ready revision; minReplicas=1 maxReplicas=1;
+durable volume mounted; image=sociobotregistry.azurecr.io/sf-screenreader-task-audit:91a93b133a13;
+health={"status":"ok","build_sha":"91a93b133a13a87c8af67faf15a8882a16c617e8"}
 
-1. Publish the intended candidate commit to the repository and nominate its exact reachable SHA.
-2. Apply `.factory/container-scale.json`: one replica and the durable Azure File volume mounted at `/app/data`.
-3. Deploy an image built from the nominated SHA and confirm `/health` returns that full SHA.
-4. Rerun `npm run verify:live-deployment` and `npm run verify:live-rate-limit`; require 40×404 + 1×429 for 41 requests, 40×404 + 60×429 for 100, `Retry-After: 1`, and idle recovery.
-5. Repeat the candidate claims and live smoke suite before release.
+npm run verify:live-rate-limit
+rate-limit verified: concurrent 41=40x404/1x429; concurrent 100=40x404/60x429;
+idle recovery=404
 
-## Verification commands
+npm run verify:live-checkout
+checkout verified: catalog USD 39.00; 303 to hosted Dodo session
+```
+
+Direct live requests returned 200 for `/`, `/demo`, `/audit`, `/privacy`,
+`/terms`, `/report`, `/demo/report`, and `/share/<32-hex-id>`; `/not-a-route`
+returned 404. The current fingerprinted JavaScript returned
+`Cache-Control: public, max-age=31536000, immutable`; `service-worker.js`
+returned `Cache-Control: no-cache`. The ACR production build succeeded as run
+`ch1dv`.
+
+The live URL smoke JSON and desktop/390 px captures are in
+[`repair-10-artifacts/verify-live/`](repair-10-artifacts/verify-live/).
+
+## Verification completed
+
+| Check | Result |
+| --- | --- |
+| Clean install | `npm ci` passed; 60 packages audited, 0 vulnerabilities |
+| Unit, integration, desktop, and 390 px mobile | `npm test`: 10 Vitest tests and 58 Playwright tests passed |
+| Manifest claims | All 21 `.factory/claims.json` commands rerun independently and passed: 18 browser claim commands plus 3 Rust claim commands |
+| Rust backend | `cargo test`: 13 passed; `cargo fmt -- --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo build --release` passed |
+| Type/build/security | `npx tsc --noEmit`, `npm run build`, `npm audit`, and `npm audit --omit=dev` passed; build emitted 40.13 KB JS (12.26 KB gzip) and 10.91 KB CSS (3.44 KB gzip) |
+| Clean runtime contract | The release binary started from `env -i PORT=18080`; `/health` returned `dev`, all documented direct routes returned 200, unknown route returned 404, and assets had immutable caching |
+| Live browser suite | `PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e -- --retries=0`: 56 passed; 2 local-recorded-license fixture cases skipped by design |
+| Accessibility and keyboard | Playwright Axe found no serious/critical findings on public routes and the 404; skip link, Enter/Space flows, route-heading focus, 44 px targets, 200% text reflow, reduced motion, and 390 px layout passed |
+| Privacy, offline, and update | Claim tests passed for first-party-only local audit traffic, demo/saved-audit offline reload in separate contexts, and service-worker update behavior |
+| URL smoke | `/opt/fleet/lib/verify-url.sh` reported HTTP 200, no console errors, title `Screenreader Task Audit — record task evidence`, `lang=en`, one h1, one main, and no missing image alt text |
+| Lighthouse mobile | `/?demo=1`: Performance 100, Accessibility 100, Best Practices 100, SEO 100; LCP 1,130 ms, FCP 1,101 ms, TBT 9 ms, CLS 0 |
+
+This is a web-with-backend product, so package/consumer installation is not
+applicable. Checkout was verified only through the safe hosted-Dodo redirect;
+no card data, purchase, or refund was submitted. Recorded license fixtures
+cover create, invalid, and revoked-license behavior without spending money.
+
+## Run and verify
 
 ```sh
 npm ci
 npm test
 npm run test:backend
 npx tsc --noEmit
-cargo fmt --check
+cargo fmt -- --check
 cargo clippy --all-targets -- -D warnings
 npm run build
 cargo build --release
-PLAYWRIGHT_BASE_URL=https://screenreader-task-audit.sociobot.in npm run test:e2e -- --retries=0
-EXPECTED_BUILD_SHA=<reachable-candidate-sha> npm run verify:live-deployment
+EXPECTED_BUILD_SHA=91a93b133a13a87c8af67faf15a8882a16c617e8 npm run verify:live-deployment
 npm run verify:live-rate-limit
 npm run verify:live-checkout
 ```
 
-No product code was modified. Only verification documentation and evidence were added.
+## Known gaps
+
+None. The live application is on the repair image, has one durable SQLite
+writer, and enforces the documented public API allowance.
