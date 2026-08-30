@@ -15,7 +15,14 @@ export default defineConfig({
   workers: 1,
   // The local suite exercises the same Rust server and real static 404 that
   // production uses; Vite's development fallback cannot cover that response.
-  use: { baseURL: externalBaseURL ?? 'http://127.0.0.1:8080', trace: 'retain-on-failure', screenshot: 'only-on-failure' },
+  use: {
+    baseURL: externalBaseURL ?? 'http://127.0.0.1:8080',
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    // The worker image has no GPU device. Disabling Chromium's transient GPU
+    // process avoids unrelated command-buffer crashes during long audit runs.
+    launchOptions: { args: ['--disable-gpu'] }
+  },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } }
