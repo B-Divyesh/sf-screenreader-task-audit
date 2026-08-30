@@ -30,7 +30,7 @@ Round 3 adds real paid-report durability proof, a real backend team-sharing path
 | Production bundle | PASS; JS 40.13 KB raw / 12.26 KB gzip; CSS 10.91 KB raw / 3.44 KB gzip |
 | Live Playwright with retries disabled | PASS; 56 applicable checks, 2 recorded-license local-only checks skipped |
 | Live URL verifier on `/` and `/?demo=1` | PASS; correct title, `lang`, one `h1`, `main`, alternatives, labels, and no console errors |
-| Live Lighthouse on `/?demo=1` | PASS; Performance 100, Accessibility 100, Best Practices 100, SEO 100; LCP 1.081 s; CLS 0 |
+| Live Lighthouse on `/?demo=1` | PASS; Performance 100, Accessibility 100, Best Practices 100, SEO 100; LCP 1.078 s; CLS 0 |
 | Live checkout boundary | PASS; Sociobot catalog USD 39.00; unpaid request returns 303 to hosted Dodo checkout |
 | Live rate-limit boundary | PASS; 41 requests = 40×404 + 1×429; 100 = 40×404 + 60×429; `Retry-After: 1`; idle recovery = 404 |
 | Live deployment topology | PASS; exact image and `/health` source, one active healthy revision, 1/1 scale, Azure File mounted at `/app/data` |

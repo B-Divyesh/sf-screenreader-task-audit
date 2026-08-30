@@ -41,7 +41,7 @@ Cold live evidence: [landing desktop](evidence/polish-3-landing/screenshot-deskt
 - The production bundle is 40.13 KB JavaScript and 10.91 KB CSS before gzip, under the product budgets.
 - Cold production browser verification passed 56 applicable checks with retries disabled. The two local-only recorded-license creation cases were skipped live; the live checkout, topology, health, and rate-limit checks passed separately.
 - Axe found no serious or critical issue on landing, demo, report, privacy, terms, or 404 routes in desktop and 390 px projects.
-- Lighthouse on the cold live demo scored 100 Performance, 100 Accessibility, 100 Best Practices, and 100 SEO. LCP was 1.081 seconds, CLS was 0, and transfer size was 53.6 KB. Raw report: [polish-3-lighthouse.json](evidence/polish-3-lighthouse.json).
+- Lighthouse on the cold live demo scored 100 Performance, 100 Accessibility, 100 Best Practices, and 100 SEO. LCP was 1.078 seconds, CLS was 0, and transfer size was 53.6 KB. Raw report: [polish-3-lighthouse.json](evidence/polish-3-lighthouse.json).
 - The deployed image reports the expected source at `/health`, has one active healthy revision at 100% traffic, uses one replica, and mounts `screenreader-task-audit-data` at `/app/data`.
 
 No finding from reviews 1, 2, or 3 remains open.
