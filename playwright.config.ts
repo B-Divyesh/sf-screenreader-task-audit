@@ -6,10 +6,7 @@ export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
   expect: { timeout: 5_000 },
-  // Chromium can occasionally restart a worker while its isolated profile is
-  // starting. A single retry still fails reproducible product regressions but
-  // keeps the clean browser gate deterministic in the worker environment.
-  retries: 1,
+  retries: 0,
   // One Chromium process at a time keeps the desktop/mobile clean-checkout
   // gate stable on the factory worker's shared-memory browser image.
   workers: 1,
@@ -19,8 +16,9 @@ export default defineConfig({
     baseURL: externalBaseURL ?? 'http://127.0.0.1:8080',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    // The worker image has no GPU device. Disabling Chromium's transient GPU
-    // process avoids unrelated command-buffer crashes during long audit runs.
+    // Use Playwright's pinned full Chromium build instead of the separate
+    // headless-shell binary, which can crash its GPU process in this worker.
+    channel: 'chromium',
     launchOptions: { args: ['--disable-gpu'] }
   },
   projects: [

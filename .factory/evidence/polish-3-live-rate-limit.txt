@@ -1,0 +1,5 @@
+
+> screenreader-task-audit@1.0.0 verify:live-rate-limit
+> sh scripts/verify-live-rate-limit.sh
+
+rate-limit verified: concurrent 41=40x404/1x429; concurrent 100=40x404/60x429; idle recovery=404

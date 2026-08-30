@@ -1,0 +1,12 @@
+HTTP/2 200 
+content-type: text/html
+accept-ranges: bytes
+last-modified: Sun, 30 Aug 2026 00:14:16 GMT
+content-length: 1606
+x-content-type-options: nosniff
+referrer-policy: strict-origin-when-cross-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+content-security-policy: default-src 'self'; connect-src 'self' https://api.sociobot.in; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
+cache-control: no-cache
+date: Sun, 30 Aug 2026 00:23:59 GMT
+

@@ -431,8 +431,10 @@ test('the 390px first screen states the job, audience, action, result, and three
 });
 test('static 404 keeps links and focus indicators accessible in dark mode', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
+  await page.setViewportSize({ width: 390, height: 844 });
   const response = await page.goto('/missing');
   expect(response?.status()).toBe(404);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await expect(page.locator('nav a').first()).toHaveCSS('color', 'rgb(117, 167, 255)');
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Skip to main content' })).toHaveCSS('outline-color', 'rgb(117, 167, 255)');
